@@ -9,6 +9,7 @@
 3. **Paso a Paso:** No intentes implementar todo de una vez. Trabaja en sprints de 1 característica (Feature Branching). Solicita permiso al humano antes de crear grandes ramas de código.
 4. **Tipado Estricto:** Usa TypeScript siempre. No uses `any`. Define interfaces para cada respuesta de API externa.
 5. **Logs y Errores:** Evita logs silenciados. Implementa un sistema de manejo de errores global (Error Boundaries en el Frontend y capa de manejo de excepciones en el Backend).
+6. **Autonomía Total por Tarea:** Una vez aprobada una tarea o Sprint, el agente tiene autorización para ejecutar todos los sub-pasos técnica y lógicamente necesarios de forma autónoma. No debe solicitar permiso para comandos individuales salvo en casos de error bloqueante o dudas de diseño críticas no documentadas aquí.
 
 ## 2. STACK TECNOLÓGICO SELECCIONADO
 *(Justificación: Se elige un stack monolito-fullstack para máxima velocidad de desarrollo, compatibilidad total con TypeScript y resiliencia ante bloqueos de internet en Venezuela).*

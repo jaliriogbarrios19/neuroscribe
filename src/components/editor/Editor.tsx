@@ -2,29 +2,43 @@
 
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
+import { useEffect } from 'react'
 
-const Editor = () => {
+interface EditorProps {
+  content?: string;
+  onChange?: (content: string) => void;
+}
+
+const Editor = ({ content, onChange }: EditorProps) => {
   const editor = useEditor({
     extensions: [
       StarterKit,
     ],
-    content: `
+    content: content || `
       <h2>Bienvenido a NeuroScribe</h2>
       <p>Este es el editor profesional diseñado para transcripciones clínicas e investigación científica.</p>
-      <ul>
-        <li><strong>Precisión APA 7:</strong> Citación automática.</li>
-        <li><strong>Transcripción IA:</strong> Integrada con Whisper.</li>
-      </ul>
     `,
     editorProps: {
       attributes: {
-        class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none min-h-[500px]',
+        class: 'prose prose-zinc dark:prose-invert max-w-none focus:outline-none min-h-[600px] p-12',
       },
+    },
+    onUpdate: ({ editor }) => {
+      if (onChange) {
+        onChange(editor.getHTML());
+      }
     },
   })
 
+  // Update content when prop changes
+  useEffect(() => {
+    if (editor && content !== undefined && content !== editor.getHTML()) {
+      editor.commands.setContent(content);
+    }
+  }, [content, editor]);
+
   return (
-    <div className="bg-white p-8 shadow-lg border border-gray-100 rounded-lg max-w-4xl mx-auto mt-10">
+    <div className="w-full bg-white dark:bg-zinc-900">
       <EditorContent editor={editor} />
     </div>
   )
