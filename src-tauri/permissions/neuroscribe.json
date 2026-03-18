@@ -1,6 +1,6 @@
 {
-  "identifier": "allow-all-commands-v1",
-  "description": "enables NeuroScribe custom commands - force sync",
+  "identifier": "allow-neuroscribe-commands",
+  "description": "enables NeuroScribe custom commands",
   "commands": [
     "greet",
     "db_get_profile",
