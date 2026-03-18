@@ -1,5 +1,5 @@
 [package]
-name = "neuroscribe_lib"
+name = "neuroscribe"
 version = "1.0.0"
 description = "NeuroScribe: IA Médica Local First"
 authors = ["Sofiaveapp"]

@@ -1,5 +1,4 @@
 {
-  "$schema": "../gen/schemas/permission-schema.json",
   "identifier": "allow-all-commands",
   "description": "enables NeuroScribe custom commands",
   "commands": [

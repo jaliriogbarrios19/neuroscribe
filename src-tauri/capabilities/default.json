@@ -1,5 +1,4 @@
 {
-  "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "enables the default permissions for NeuroScribe",
   "windows": [
@@ -18,6 +17,6 @@
     "os:default",
     "log:default",
     "sql:default",
-    "neuroscribe_lib:allow-all-commands"
+    "neuroscribe:allow-all-commands"
   ]
 }
