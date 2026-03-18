@@ -17,27 +17,6 @@
     "os:default",
     "log:default",
     "sql:default",
-    {
-      "identifier": "allow-neuroscribe-commands",
-      "allow": [
-        "greet",
-        "db_get_profile",
-        "db_get_folders",
-        "db_create_folder",
-        "db_get_documents",
-        "db_save_document",
-        "get_hardware_info",
-        "get_hardware_id",
-        "check_models",
-        "download_model",
-        "transcribe_audio_local",
-        "process_text_local",
-        "generate_research_paper_local",
-        "generate_quick_answer_local",
-        "activate_license",
-        "get_academic_data_local",
-        "verify_doi_local"
-      ]
-    }
+    "neuroscribe:allow-neuroscribe-commands"
   ]
 }
