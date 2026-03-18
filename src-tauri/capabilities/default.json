@@ -18,6 +18,6 @@
     "os:default",
     "log:default",
     "sql:default",
-    "allow-commands"
+    "app:allow-all-commands"
   ]
 }

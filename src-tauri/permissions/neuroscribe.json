@@ -1,6 +1,6 @@
 {
   "$schema": "../gen/schemas/permission-schema.json",
-  "identifier": "allow-neuroscribe-commands",
+  "identifier": "allow-all-commands",
   "description": "enables NeuroScribe custom commands",
   "commands": [
     "greet",
