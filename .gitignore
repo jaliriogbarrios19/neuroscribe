@@ -13,10 +13,9 @@
 # Rust / Tauri
 /src-tauri/target
 /src-tauri/gen
-/src-tauri/bin/whisper/*
-/src-tauri/bin/llama/*
-!/src-tauri/bin/whisper/.gitkeep
-!/src-tauri/bin/llama/.gitkeep
+# Permitir específicamente los sidecars para el build de GitHub
+!/src-tauri/bin/whisper/whisper-cli-x86_64-pc-windows-msvc.exe
+!/src-tauri/bin/llama/llama-cli-x86_64-pc-windows-msvc.exe
 
 # testing
 /coverage
