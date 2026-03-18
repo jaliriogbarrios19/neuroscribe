@@ -23,8 +23,7 @@ jobs:
       - name: setup node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'npm'
+          node-version: 24 # Actualizado a la última versión estable requerida
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -32,7 +31,6 @@ jobs:
       - name: install frontend dependencies
         run: npm install
 
-      # Paso de verificación para asegurar que los motores de IA están en su sitio
       - name: verify sidecars
         shell: pwsh
         run: |
@@ -42,9 +40,11 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: v__VERSION__
           releaseName: "NeuroScribe v__VERSION__"
-          releaseBody: "Release oficial de NeuroScribe. Incluye instalador para Windows."
+          releaseBody: "Release oficial de NeuroScribe. IA Médica Local First."
           releaseDraft: true
           prerelease: false

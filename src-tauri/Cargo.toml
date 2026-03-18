@@ -1,14 +1,12 @@
 [package]
 name = "app"
-version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+version = "1.0.0"
+description = "NeuroScribe: IA Médica Local First"
+authors = ["Sofiaveapp"]
 license = ""
 repository = ""
 edition = "2021"
 rust-version = "1.77.2"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
 name = "app_lib"
@@ -30,3 +28,5 @@ chrono = { version = "0.4", features = ["serde"] }
 sysinfo = "0.30"
 reqwest = { version = "0.11", features = ["json", "stream", "rustls-tls"] }
 futures-util = "0.3"
+tokio = { version = "1", features = ["full"] }
+regex = "1"
