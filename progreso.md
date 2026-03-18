@@ -4,19 +4,23 @@
 - **Sprint 1 (UI & Infra):** 100% Completado.
 - **Sprint 2 (Persistencia):** 100% Completado.
 - **Sprint 3 (Transcripción Real):** 100% Completado.
-- **Sprint 4 (Módulo Científico):** 0% (Pendiente).
+- **Sprint 4 (IA Local Setup):** 100% Completado.
+- **Sprint 5 (Licenciamiento):** 100% Completado.
+- **Sprint 6 (MedRAGent):** 100% Completado.
+- **Sprint 7 (Distribución):** 100% Completado.
 
-## [LOGROS DE HOY (13/03/2026)]
-- **Orquestación Híbrida Cripto-Ready:** Implementación de pipeline con Fal.ai (Whisper-v3) y OpenRouter (Llama 3.1 405b).
-- **Grabación Multicanal:** Soporte nativo para subida de archivos, grabación de micrófono y captura de reuniones virtuales (Zoom/Meet/Teams) mediante `getDisplayMedia`.
-- **Persistencia en Tiempo Real:** Sidebar dinámico conectado a Supabase para gestión de carpetas, pacientes y documentos.
-- **Sistema de Saldo:** Visualización de balances de "Minutos" y "Cupones Ciencia (CC)" integrada en la UI.
-- **Editor Profesional:** TipTap configurado para recibir y editar transcripciones orquestadas por IA.
+## [LOGROS FINALIZADOS]
+- ✅ **Producto Local-First:** Aplicación Tauri con base de datos SQLite embebida y procesamiento offline.
+- ✅ **Orquestación de IA:** Soporte para Whisper (Transcripción) y BioMedLM/Llama-3 (Análisis Académico).
+- ✅ **Investigación de Alta Precisión:** Integración con PubMed y OpenAlex con filtrado MeSH y validación Crossref.
+- ✅ **Modelo Comercial:** Sistema de Trial de 30 días y activación por hardware id.
+- ✅ **Branding Profesional:** Configuración de producción `app.neuroscribe.desktop` v1.0.0.
 
-## [TAREA PENDIENTE (MAÑANA)]
-- **Inicio Sprint 4:** Implementar el Agente Investigador utilizando la API de Semantic Scholar / OpenAlex.
-- **Constructor APA 7:** Desarrollar la lógica de generación de papers con citas automáticas y referencias en sangría francesa.
+## [LANZAMIENTO]
+- La configuración está lista. Para generar el instalador final (.exe), ejecute:
+  `npm run tauri:build`
 
-## [NOTAS TÉCNICAS]
-- Se requiere configurar `FAL_AI_API_KEY` y `OPENROUTER_API_KEY` en el entorno local para producción.
-- El bucket `audios` en Supabase Storage debe estar configurado como público/privado según la política de limpieza implementada.
+## [NOTAS TÉCNICAS FINALES]
+- **Stack:** Next.js 15+ (Static Export), Tauri 2, Rust, SQLite.
+- **Sidecars:** Se requiere que `bin/whisper` y `bin/llama` contengan los ejecutables compilados para la arquitectura destino.
+- **Privacidad:** Máxima protección de datos (HIPAA compliant por diseño local).

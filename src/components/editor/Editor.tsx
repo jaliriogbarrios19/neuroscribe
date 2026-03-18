@@ -1,8 +1,10 @@
-﻿'use client'
+'use client'
 
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { useEffect } from 'react'
+import { useUI } from '@/hooks/useUI'
+import { APA7 } from './extensions/APA7'
 
 interface EditorProps {
   content?: string;
@@ -10,10 +12,14 @@ interface EditorProps {
 }
 
 const Editor = ({ content, onChange }: EditorProps) => {
+  const { researchContent, clearResearchContent } = useUI();
+
   const editor = useEditor({
     extensions: [
       StarterKit,
+      APA7,
     ],
+    immediatelyRender: false,
     content: content || `
       <h2>Bienvenido a NeuroScribe</h2>
       <p>Este es el editor profesional diseñado para transcripciones clínicas e investigación científica.</p>
@@ -36,6 +42,14 @@ const Editor = ({ content, onChange }: EditorProps) => {
       editor.commands.setContent(content);
     }
   }, [content, editor]);
+
+  // Listen for research content injections
+  useEffect(() => {
+    if (editor && researchContent) {
+      editor.commands.insertContent(researchContent);
+      clearResearchContent();
+    }
+  }, [researchContent, editor, clearResearchContent]);
 
   return (
     <div className="w-full bg-white dark:bg-zinc-900">

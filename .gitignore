@@ -10,6 +10,14 @@
 !.yarn/releases
 !.yarn/versions
 
+# Rust / Tauri
+/src-tauri/target
+/src-tauri/gen
+/src-tauri/bin/whisper/*
+/src-tauri/bin/llama/*
+!/src-tauri/bin/whisper/.gitkeep
+!/src-tauri/bin/llama/.gitkeep
+
 # testing
 /coverage
 
@@ -23,6 +31,8 @@
 # misc
 .DS_Store
 *.pem
+*.db
+*.db-journal
 
 # debug
 npm-debug.log*

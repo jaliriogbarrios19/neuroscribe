@@ -1,26 +1,40 @@
-'use server'
+import { invoke } from '@tauri-apps/api/core';
 
-import { createClient } from "@/lib/supabase/server";
+export interface Profile {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  minutes_balance: number;
+  cc_balance: number;
+  created_at: string;
+  license_key: string | null;
+  trial_start_date: string;
+  is_activated: boolean;
+  activation_token: string | null;
+}
 
-/**
- * Agente Analista: Obtiene el perfil económico del usuario.
- */
-export async function getProfile() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) return null;
-
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single();
-
-  if (error) {
-    console.error("Error fetching profile:", error);
+export async function getProfile(): Promise<Profile | null> {
+  try {
+    const profile = await invoke<Profile>('db_get_profile');
+    return profile;
+  } catch (error) {
+    console.error("Error fetching profile from local DB:", error);
     return null;
   }
+}
 
-  return data;
+export async function activateLicense(key: string): Promise<boolean> {
+  try {
+    const success = await invoke<boolean>('activate_license', { key });
+    return success;
+  } catch (error) {
+    console.error("Error activating license:", error);
+    throw error;
+  }
+}
+
+export async function updateProfile(data: any) {
+  // Nota: Dejamos esto mockeado por ahora ya que el perfil local es estático en el primer arranque
+  console.log("[MOCK] updateProfile", data);
+  return { id: "local-user", ...data };
 }

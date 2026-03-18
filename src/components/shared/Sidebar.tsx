@@ -4,6 +4,7 @@ import { Folder, FolderPlus, Search, User, Loader2, Plus, X } from "lucide-react
 import { useState, useEffect } from "react";
 import { getFolders, createFolder } from "@/app/actions/folders";
 import { getProfile } from "@/app/actions/profiles";
+import IAStatus from "./IAStatus";
 
 const Sidebar = () => {
   const [folders, setFolders] = useState<any[]>([]);
@@ -101,6 +102,10 @@ const Sidebar = () => {
             )}
           </nav>
         )}
+      </div>
+
+      <div className="px-4 mb-4">
+        <IAStatus />
       </div>
 
       <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/50">

@@ -1,42 +1,39 @@
-# PROPUESTA ECONÓMICA AGRESIVA: NEUROSCRIBE (ENFOQUE CIENTÍFICO)
+# PROPUESTA ECONÓMICA AGRESIVA: NEUROSCRIBE DESKTOP (PAGO ÚNICO)
 
-Esta versión maximiza el valor percibido por el usuario, ofreciendo una cantidad de "Cupones de Ciencia" (CC) que permite una investigación literaria extensa sin preocuparse por el costo unitario, manteniendo el margen de beneficio por encima del 50%.
+Esta versión maximiza el valor percibido por el usuario ofreciendo una herramienta clínica *ilimitada*, funcionando en su propia computadora, destruyendo cualquier objeción relacionada con fugas de privacidad (HIPAA compliance garantizado).
 
-## 1. PARIDAD DE FUNCIONES TOTAL
-Todos los planes incluyen:
-*   Transcripción Whisper-Large-v3 + Diarización + Resúmenes Llama 3.1 405b.
-*   Editor Profesional TipTap (Exportación PDF/DOCX).
-*   Chat RAG (Memoria de Carpeta/Paciente).
-*   **Módulo Científico APA 7 (Búsqueda y Generación de Papers).**
+## 1. PARIDAD DE FUNCIONES TOTAL (ILIMITADAS)
+Todas las licencias incluyen:
+*   **Transcripción Local Ilimitada:** `whisper.cpp` + Diarización rápida en offline.
+*   **Editor Profesional TipTap:** (Exportación PDF/DOCX local).
+*   **Bóveda Médica Local:** Bases de datos SQLite para pacientes completamente cifradas.
+*   **Investigación y APA 7 Ilimitado:** La app busca temporalmente los papers y el LLM local los redacta sin consumir saldo alguno.
 
-## 2. ESTRUCTURA DE PLANES MASIVOS
-*Fórmula: Menos restricciones, más productividad para el usuario.*
+## 2. ESTRUCTURA DE PRECIOS (MICRO-SUSCRIPCIÓN)
+*Fórmula: Precio ultra-competitivo para adopción masiva + Costo de servidor $0.*
 
-| Plan | Inversión | Minutos Incluidos | CC Incluidos | Capacidad de Investigación |
-| :--- | :--- | :--- | :--- | :--- |
-| **Básico** | **$10** | 800 min | 50 CC | 5 Papers Pro o 50 Búsquedas. |
-| **Pro** | **$20** | 2,000 min | 150 CC | 15 Papers Pro o 150 Búsquedas. |
-| **Premium** | **$50** | 6,000 min | 500 CC | 50 Papers Pro o 500 Búsquedas. |
+| Modalidad | Inversión | Beneficios |
+| :--- | :--- | :--- |
+| **Prueba Gratuita** | **$0** | 30 días de uso ilimitado local. |
+| **Plan Mensual** | **$1 / mes** | Uso ilimitado + Actualizaciones constantes. |
+| **Plan Anual** | **$10 / año** | Ahorro del 17% + Actualizaciones de modelos IA. |
 
-## 3. VALOR DE CONSUMO (Costo por Acción)
-*   **Minutos de Audio:** 1 min de saldo por 1 min de audio.
-*   **Búsqueda Científica / Consulta IA:** 1 CC.
-*   **Generador Paper APA 7 completo:** 10 CC (Análisis exhaustivo de 10 fuentes Q1/Q2).
+## 3. VIABILIDAD TÉCNICA Y MARGEN
+**¿Por qué un precio tan bajo de $1 o $10 es rentable?** 
+*   **Margen del 99%:** Como la IA corre en la laptop del usuario, NeuroScribe no tiene gastos de procesamiento. Los $1 o $10 son casi utilidad neta para la empresa.
+*   **Psicología de la "Micro-Suscripción":** Un médico no piensa dos veces antes de gastar $1 al mes, pero es un ingreso recurrente que garantiza que podamos seguir actualizando la app y las bibliotecas científicas.
 
-## 4. SISTEMA DE RECARGAS INDEPENDIENTES
-*   **Pack Investigador ($10):** 600 min o 60 CC.
-*   **Pack Academia ($25):** 1,800 min o 180 CC.
+## 4. SISTEMA DE LICENCIAMIENTO
+*   **Bóveda de Licencias:** Base de datos web mínima que relaciona `email` -> `license_key`.
+*   Al abrir el programa, hace "ping" al servidor para verificar la llave. Si no hay internet, admite hasta 5 aperturas "offline" antes de bloquearse por seguridad.
+*   **Protección de Piratería:** Empaquetando la app con ofuscadores y pidiendo registro de correo en la prueba gratuita.
 
-## 5. VIABILIDAD TÉCNICA Y MARGEN
-**¿Por qué es viable subir tanto los CC?** 
-Las APIs de búsqueda científica (Semantic Scholar / OpenAlex) son mayoritariamente gratuitas o de bajísimo costo. El costo real es el procesamiento del modelo Llama 3.1 405b en OpenRouter.
-*   Generar un Paper APA de 15 páginas cuesta aproximadamente **$0.15 - $0.25** en tokens hoy en día.
-*   En el **Plan Básico ($10)**, si el usuario hace 5 Papers, el costo de IA es apenas de **$1.25**. sumado al costo de los minutos de audio, tu margen neto sigue siendo superior al **65%**.
-
-## 6. GESTIÓN DE PAGOS EN VENEZUELA
-*   **PayPal:** Precio + comisiones (+5.4% + $0.30).
-*   **Binance Pay / Zinli:** Precio neto de lista.
-*   **Pago Móvil (Bs):** Tasa Binance P2P + 1% de protección cambiaria.
+## 5. GESTIÓN DE PAGOS EN VENEZUELA (Integración Web)
+Como no hay recargas constantes, la página web de ventas (Landing Page) se encargará de cobrar:
+*   **PayPal:** $99.
+*   **Zinli / Binance Pay:** Envío por QR.
+*   **Pago Móvil:** Automatizado o Manual.
+*   Una vez verificado el pago, Make.com envía el `License Key` al correo del doctor.
 
 ---
-*NeuroScribe: El volumen de un gigante, la precisión de un científico.*
+*NeuroScribe: IA Médica Ilimitada, Indestructible y Privada.*

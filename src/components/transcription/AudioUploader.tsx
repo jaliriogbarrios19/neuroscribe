@@ -1,8 +1,20 @@
 'use client'
 
-import { Upload, X, FileAudio, Loader2, Mic, Square, Play, Circle, ScreenShare } from "lucide-react";
+import { Upload, X, FileAudio, Loader2, Mic, Square, Circle, ScreenShare } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import MeetingRecorder from "./MeetingRecorder";
+import { transcribeAudioLocal } from "@/app/actions/ia";
+
+// Importar APIs de Tauri solo si estamos en el entorno de escritorio
+const getTauriAPIs = async () => {
+  if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+    const { writeFile, BaseDirectory } = await import('@tauri-apps/plugin-fs');
+    const { cacheDir, join } = await import('@tauri-apps/api/path');
+    const { listen } = await import('@tauri-apps/api/event');
+    return { writeFile, BaseDirectory, cacheDir, join, listen };
+  }
+  return null;
+};
 
 interface AudioUploaderProps {
   onTranscriptionComplete?: (text: string, tokens: number) => void;
@@ -15,12 +27,32 @@ const AudioUploader = ({ onTranscriptionComplete }: AudioUploaderProps) => {
   const [progress, setProgress] = useState(0);
   const [mode, setMode] = useState<'upload' | 'record' | 'meeting'>('upload');
   
-  // Recording states
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    let unlisten: any;
+    
+    const setupListener = async () => {
+      const apis = await getTauriAPIs();
+      if (apis?.listen) {
+        unlisten = await apis.listen('transcription-progress', (event: any) => {
+          const p = (event.payload as { progress: number }).progress;
+          setProgress(p);
+          setStatus(`Transcribiendo... (${p}%)`);
+        });
+      }
+    };
+
+    setupListener();
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -38,9 +70,9 @@ const AudioUploader = ({ onTranscriptionComplete }: AudioUploaderProps) => {
       const chunks: Blob[] = [];
       mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const blob = new Blob(chunks, { type: 'audio/wav' }); // Cambiamos a wav para mejor soporte local
         setAudioBlob(blob);
-        setFile(new File([blob], `grabacion_${new Date().getTime()}.webm`, { type: 'audio/webm' }));
+        setFile(new File([blob], `grabacion_${new Date().getTime()}.wav`, { type: 'audio/wav' }));
       };
 
       mediaRecorder.start();
@@ -66,7 +98,7 @@ const AudioUploader = ({ onTranscriptionComplete }: AudioUploaderProps) => {
 
   const handleMeetingRecordingComplete = (blob: Blob) => {
     setAudioBlob(blob);
-    setFile(new File([blob], `reunion_${new Date().getTime()}.webm`, { type: 'video/webm' }));
+    setFile(new File([blob], `reunion_${new Date().getTime()}.wav`, { type: 'audio/wav' }));
   };
 
   const formatDuration = (seconds: number) => {
@@ -86,45 +118,39 @@ const AudioUploader = ({ onTranscriptionComplete }: AudioUploaderProps) => {
     if (!file) return;
     setIsUploading(true);
     setProgress(10);
-    setStatus("Subiendo archivo a Supabase Storage...");
+    setStatus("Preparando archivo local...");
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("type", "transcript");
+      const apis = await getTauriAPIs();
+      if (!apis) throw new Error("Tauri APIs no disponibles");
 
-      // Intervalo de progreso visual mientras la API responde (fake until 90)
-      const interval = setInterval(() => {
-        setProgress(prev => {
-          if (prev < 90) return prev + 2;
-          return prev;
-        });
-      }, 1000);
+      const { writeFile, cacheDir, join } = apis;
+      
+      // 1. Guardar archivo en el directorio de caché para que Whisper pueda leerlo
+      const buffer = await file.arrayBuffer();
+      const uint8Array = new Uint8Array(buffer);
+      const tempPath = await join(await cacheDir(), file.name);
+      
+      setStatus("Guardando en caché temporal...");
+      await writeFile(tempPath, uint8Array);
+      setProgress(30);
 
-      // Paso 1: Subida y Transcripción
-      setStatus("Procesando con Whisper-v3 (Fal.ai)...");
-      const response = await fetch("/api/transcribe", {
-        method: "POST",
-        body: formData,
-      });
+      // 2. Invocar transcripción local (Whisper Sidecar)
+      setStatus("Transcribiendo offline con Whisper-v3...");
+      const text = await transcribeAudioLocal(tempPath);
+      
+      setProgress(90);
+      setStatus("Análisis finalizado.");
 
-      clearInterval(interval);
-
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || "Error en el servidor");
+      if (onTranscriptionComplete) {
+        // En esta fase retornamos el texto crudo. 
+        // El análisis con Llama local será el siguiente paso.
+        onTranscriptionComplete(text, 0); 
       }
-
-      setStatus("Análisis clínico con Llama 3.1 (OpenRouter)...");
-      const data = await response.json();
       
       setProgress(100);
       setStatus("¡Completado!");
 
-      if (onTranscriptionComplete) {
-        onTranscriptionComplete(data.html, data.tokens);
-      }
-      
       setTimeout(() => {
         setIsUploading(false);
         setFile(null);
@@ -142,25 +168,15 @@ const AudioUploader = ({ onTranscriptionComplete }: AudioUploaderProps) => {
 
   return (
     <div className="w-full max-w-xl mx-auto p-6 border-2 border-dashed border-zinc-200 rounded-xl bg-zinc-50/30 dark:border-zinc-800 dark:bg-zinc-900/30">
-      {/* Tab Switcher */}
       {!file && !isRecording && (
         <div className="flex p-1 bg-zinc-100 rounded-lg mb-6 dark:bg-zinc-800/50">
-          <button 
-            onClick={() => setMode('upload')}
-            className={`flex-1 flex items-center justify-center gap-2 py-1.5 text-xs font-medium rounded-md transition-all ${mode === 'upload' ? 'bg-white shadow-sm dark:bg-zinc-700 text-indigo-600 dark:text-indigo-400' : 'text-zinc-500'}`}
-          >
+          <button onClick={() => setMode('upload')} className={`flex-1 flex items-center justify-center gap-2 py-1.5 text-xs font-medium rounded-md transition-all ${mode === 'upload' ? 'bg-white shadow-sm dark:bg-zinc-700 text-indigo-600 dark:text-indigo-400' : 'text-zinc-500'}`}>
             <Upload size={14} /> Subir
           </button>
-          <button 
-            onClick={() => setMode('record')}
-            className={`flex-1 flex items-center justify-center gap-2 py-1.5 text-xs font-medium rounded-md transition-all ${mode === 'record' ? 'bg-white shadow-sm dark:bg-zinc-700 text-indigo-600 dark:text-indigo-400' : 'text-zinc-500'}`}
-          >
+          <button onClick={() => setMode('record')} className={`flex-1 flex items-center justify-center gap-2 py-1.5 text-xs font-medium rounded-md transition-all ${mode === 'record' ? 'bg-white shadow-sm dark:bg-zinc-700 text-indigo-600 dark:text-indigo-400' : 'text-zinc-500'}`}>
             <Mic size={14} /> Grabar
           </button>
-          <button 
-            onClick={() => setMode('meeting')}
-            className={`flex-1 flex items-center justify-center gap-2 py-1.5 text-xs font-medium rounded-md transition-all ${mode === 'meeting' ? 'bg-white shadow-sm dark:bg-zinc-700 text-indigo-600 dark:text-indigo-400' : 'text-zinc-500'}`}
-          >
+          <button onClick={() => setMode('meeting')} className={`flex-1 flex items-center justify-center gap-2 py-1.5 text-xs font-medium rounded-md transition-all ${mode === 'meeting' ? 'bg-white shadow-sm dark:bg-zinc-700 text-indigo-600 dark:text-indigo-400' : 'text-zinc-500'}`}>
             <ScreenShare size={14} /> Reunión
           </button>
         </div>
@@ -180,12 +196,8 @@ const AudioUploader = ({ onTranscriptionComplete }: AudioUploaderProps) => {
           </label>
         ) : mode === 'record' ? (
           <div className="flex flex-col items-center justify-center gap-6 py-10">
-            <div className="relative">
-              <div className="absolute -inset-4 rounded-full bg-indigo-100/50 animate-pulse dark:bg-indigo-900/20" />
-              <button 
-                onClick={startRecording}
-                className="relative p-6 rounded-full bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
-              >
+            <div className="relative"><div className="absolute -inset-4 rounded-full bg-indigo-100/50 animate-pulse dark:bg-indigo-900/20" />
+              <button onClick={startRecording} className="relative p-6 rounded-full bg-indigo-600 text-white hover:bg-indigo-700 transition-colors">
                 <Mic size={32} />
               </button>
             </div>
@@ -203,10 +215,7 @@ const AudioUploader = ({ onTranscriptionComplete }: AudioUploaderProps) => {
             <Circle size={12} className="text-red-500 fill-red-500 animate-pulse" />
             <span className="text-2xl font-mono font-bold text-red-600 dark:text-red-400">{formatDuration(recordingDuration)}</span>
           </div>
-          <button 
-            onClick={stopRecording}
-            className="p-6 rounded-full bg-red-600 text-white hover:bg-red-700 transition-colors"
-          >
+          <button onClick={stopRecording} className="p-6 rounded-full bg-red-600 text-white hover:bg-red-700 transition-colors">
             <Square size={32} />
           </button>
           <p className="text-sm font-medium text-zinc-500">Grabando sesión clínica...</p>
@@ -239,10 +248,7 @@ const AudioUploader = ({ onTranscriptionComplete }: AudioUploaderProps) => {
                 <span>{progress}%</span>
               </div>
               <div className="h-2 w-full bg-zinc-200 rounded-full overflow-hidden dark:bg-zinc-800">
-                <div 
-                  className="h-full bg-indigo-600 transition-all duration-500" 
-                  style={{ width: `${progress}%` }}
-                />
+                <div className="h-full bg-indigo-600 transition-all duration-500" style={{ width: `${progress}%` }} />
               </div>
             </div>
           )}
@@ -252,11 +258,7 @@ const AudioUploader = ({ onTranscriptionComplete }: AudioUploaderProps) => {
             disabled={isUploading}
             className="w-full py-2.5 rounded-lg bg-indigo-600 text-white font-medium text-sm flex items-center justify-center gap-2 hover:bg-indigo-700 disabled:opacity-50 transition-colors"
           >
-            {isUploading ? (
-              <><Loader2 size={18} className="animate-spin" /> Procesando...</>
-            ) : (
-              "Iniciar Transcripción Real"
-            )}
+            {isUploading ? <><Loader2 size={18} className="animate-spin" /> Transcribiendo...</> : "Iniciar Transcripción Local"}
           </button>
         </div>
       )}
