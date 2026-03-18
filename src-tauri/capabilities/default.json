@@ -18,6 +18,6 @@
     "os:default",
     "log:default",
     "sql:default",
-    "app:allow-all-commands"
+    "neuroscribe_lib:allow-all-commands"
   ]
 }
