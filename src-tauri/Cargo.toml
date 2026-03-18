@@ -23,6 +23,7 @@ tauri = { version = "2.10.3", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-os = "2"
+tauri-plugin-shell = "2"
 tauri-plugin-sql = { version = "2.2.0", features = ["sqlite"] }
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "macros"] }
 uuid = { version = "1.7", features = ["v4", "serde"] }

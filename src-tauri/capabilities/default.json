@@ -16,6 +16,7 @@
     "fs:default",
     "os:default",
     "log:default",
+    "shell:default",
     "sql:default",
     "allow-neuroscribe-commands"
   ]

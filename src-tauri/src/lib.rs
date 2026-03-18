@@ -1,13 +1,12 @@
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
-use tauri::{AppHandle, Manager, Runtime, Emitter};
+use tauri::{AppHandle, Manager, Emitter};
+use tauri_plugin_shell::ShellExt;
+use tauri_plugin_shell::process::CommandEvent;
 use uuid::Uuid;
-use sysinfo::{System, SystemExt};
-use std::path::PathBuf;
-use tauri::process::{Command, CommandEvent};
+use sysinfo::System;
 use std::fs;
-use std::io::{BufRead, BufReader};
-use regex::Regex;
+use std::io::BufRead;
 
 // --- Structs de Datos ---
 
@@ -134,6 +133,7 @@ struct OpenAlexResponse {
 struct OpenAlexWork {
     doi: Option<String>,
     title: Option<String>,
+    display_name: Option<String>,
     publication_year: Option<i32>,
     host_venue: Option<OpenAlexVenue>,
     authorships: Option<Vec<OpenAlexAuthorship>>,
@@ -160,7 +160,7 @@ pub struct ProgressPayload {
     pub progress: i32,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ResearchArticle {
     pub title: String,
     pub authors: Vec<String>,
@@ -176,7 +176,7 @@ pub struct ResearchArticle {
 fn get_hardware_id() -> String {
     let mut sys = System::new_all();
     sys.refresh_all();
-    let cpu = sys.global_cpu_info().brand().to_string();
+    let cpu = sys.cpus().first().map(|c| c.brand()).unwrap_or("Unknown").to_string();
     let total_memory = sys.total_memory().to_string();
     let os = std::env::consts::OS.to_string();
     format!("{}-{}-{}", cpu, total_memory, os).replace(" ", "_")
@@ -373,7 +373,7 @@ async fn generate_quick_answer_local(query: String, articles: Vec<ResearchArticl
     let mut ev = String::new();
     for (i, a) in articles.iter().take(5).enumerate() { ev.push_str(&format!("\nFuente {}: {} ({})\nAbstract: {}\n", i+1, a.title, a.year, a.abstract_text)); }
     let prompt = format!("### System:\nSintetiza evidencia para {}.\n### User:\nQ: {}\nE:\n{}\n### Assistant:\nResp:", domain, query, ev);
-    let out = Command::new_sidecar("llama-cli").map_err(|e| e.to_string())?.args(["-m", &model_path.to_string_lossy(), "-p", &prompt, "-n", "1024", "-t", &hw.cpu_cores.to_string(), "--quiet"]).output().map_err(|e| e.to_string())?;
+    let out = handle.shell().sidecar("llama-cli").map_err(|e| e.to_string())?.args(["-m", &model_path.to_string_lossy(), "-p", &prompt, "-n", "1024", "-t", &hw.cpu_cores.to_string(), "--quiet"]).output().await.map_err(|e| e.to_string())?;
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
 }
 
@@ -383,7 +383,7 @@ async fn generate_research_paper_local(articles: Vec<ResearchArticle>, domain: S
     let hw = get_hardware_info();
     let model_path = handle.path().app_data_dir().map_err(|e| e.to_string())?.join("models").join("llama-3-8b-instruct.gguf");
     let prompt = format!("### System:\nGenera paper APA 7 para {}.\n### User:\nE: {:?}\n### Assistant:\nPaper:", domain, articles);
-    let out = Command::new_sidecar("llama-cli").map_err(|e| e.to_string())?.args(["-m", &model_path.to_string_lossy(), "-p", &prompt, "-n", "2048", "-t", &hw.cpu_cores.to_string(), "--quiet"]).output().map_err(|e| e.to_string())?;
+    let out = handle.shell().sidecar("llama-cli").map_err(|e| e.to_string())?.args(["-m", &model_path.to_string_lossy(), "-p", &prompt, "-n", "2048", "-t", &hw.cpu_cores.to_string(), "--quiet"]).output().await.map_err(|e| e.to_string())?;
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
 }
 
@@ -393,7 +393,7 @@ async fn process_text_local(text: String, task: String, state: tauri::State<'_, 
     let hw = get_hardware_info();
     let model_path = handle.path().app_data_dir().map_err(|e| e.to_string())?.join("models").join(if task == "summary" { "biomedlm-2.7b.gguf" } else { "llama-3-8b-instruct.gguf" });
     let prompt = format!("### System:\nTask: {}\n### User:\n{}\n### Assistant:\n", task, text);
-    let out = Command::new_sidecar("llama-cli").map_err(|e| e.to_string())?.args(["-m", &model_path.to_string_lossy(), "-p", &prompt, "-n", "1024", "-t", &hw.cpu_cores.to_string(), "--quiet"]).output().map_err(|e| e.to_string())?;
+    let out = handle.shell().sidecar("llama-cli").map_err(|e| e.to_string())?.args(["-m", &model_path.to_string_lossy(), "-p", &prompt, "-n", "1024", "-t", &hw.cpu_cores.to_string(), "--quiet"]).output().await.map_err(|e| e.to_string())?;
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
 }
 
@@ -401,12 +401,20 @@ async fn process_text_local(text: String, task: String, state: tauri::State<'_, 
 async fn transcribe_audio_local(audio_path: String, state: tauri::State<'_, SqlitePool>, handle: AppHandle) -> Result<String, String> {
     check_license_internal(state).await?;
     let model_path = handle.path().app_data_dir().map_err(|e| e.to_string())?.join("models").join("ggml-large-v3-turbo.bin");
-    let (mut rx, _) = Command::new_sidecar("whisper-cli").map_err(|e| e.to_string())?.args(["-m", &model_path.to_string_lossy(), "-f", &audio_path, "-oj", "-of", &format!("{}_out", audio_path), "-l", "auto"]).spawn().map_err(|e| e.to_string())?;
-    while let Some(event) = rx.recv().await { if let CommandEvent::Terminated(_) = event { break; } }
+    let (mut rx, _) = handle.shell().sidecar("whisper-cli").map_err(|e| e.to_string())?.args(["-m", &model_path.to_string_lossy(), "-f", &audio_path, "-oj", "-of", &format!("{}_out", audio_path), "-l", "auto"]).spawn().map_err(|e| e.to_string())?;
+    
+    let mut full_text = String::new();
+    while let Some(event) = rx.recv().await {
+        if let CommandEvent::Terminated(_) = event { break; }
+    }
+    
     let json_path = format!("{}_out.json", audio_path);
-    let data: WhisperOutput = serde_json::from_str(&fs::read_to_string(&json_path).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
-    let _ = fs::remove_file(&json_path);
-    Ok(data.text)
+    if let Ok(json_content) = fs::read_to_string(&json_path) {
+        let data: WhisperOutput = serde_json::from_str(&json_content).map_err(|e| e.to_string())?;
+        full_text = data.text;
+        let _ = fs::remove_file(&json_path);
+    }
+    Ok(full_text)
 }
 
 #[tauri::command]
@@ -421,6 +429,7 @@ pub fn run() {
     .plugin(tauri_plugin_log::Builder::default().build())
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_os::init())
+    .plugin(tauri_plugin_shell::init())
     .plugin(tauri_plugin_sql::Builder::default().build())
     .setup(|app| {
       let app_dir = app.path().app_data_dir().expect("dir");
