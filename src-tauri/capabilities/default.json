@@ -17,6 +17,6 @@
     "os:default",
     "log:default",
     "sql:default",
-    "neuroscribe:allow-all-commands"
+    "neuroscribe:allow-all-commands-v1"
   ]
 }
