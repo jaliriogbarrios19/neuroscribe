@@ -1,0 +1,19 @@
+change: setup-inicial
+status: archived
+phases:
+  proposal: completed
+  exploration: completed
+  spec: completed
+  design: completed
+  tasks: completed
+  apply: completed
+  verify: completed
+  archive: completed
+last_update: '2026-03-13T21:55:00Z'
+domains:
+  auth:
+    spec: completed
+  ui:
+    spec: completed
+  core:
+    spec: completed

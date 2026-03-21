@@ -1,0 +1,38 @@
+{
+  "permission": [
+    {
+      "identifier": "allow-whisper-cli",
+      "description": "Permite ejecutar el sidecar de whisper-cli para transcripciÃ³n",
+      "commands": {
+        "allow": [
+          "shell:allow-sidecar"
+        ]
+      },
+      "scope": {
+        "allow": [
+          {
+            "sidecar": "bin/whisper/whisper-cli",
+            "args": true
+          }
+        ]
+      }
+    },
+    {
+      "identifier": "allow-llama-cli",
+      "description": "Permite ejecutar el sidecar de llama-cli para inferencia local",
+      "commands": {
+        "allow": [
+          "shell:allow-sidecar"
+        ]
+      },
+      "scope": {
+        "allow": [
+          {
+            "sidecar": "bin/llama/llama-cli",
+            "args": true
+          }
+        ]
+      }
+    }
+  ]
+}
