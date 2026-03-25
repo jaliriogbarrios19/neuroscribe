@@ -1,36 +1,82 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# NeuroScribe
 
-## Getting Started
+**NeuroScribe** es una aplicación de escritorio Local-First para profesionales de la salud, construida con [Next.js](https://nextjs.org) + [Tauri 2](https://tauri.app) + Rust. Permite transcribir audio, generar resúmenes clínicos y sintetizar investigación académica completamente offline, sin enviar datos a ningún servidor externo.
 
-First, run the development server:
+## Características principales
+
+- 🎙️ **Transcripción offline** con Whisper v3 (GGML)
+- 🧠 **Análisis clínico** con LLaMA 3 8B y BioMedLM 2.7B locales
+- 📚 **Búsqueda académica** integrada con PubMed y OpenAlex
+- 📄 **Generación de papers** en formato APA 7 con citaciones verificadas
+- 🔐 **100% Local-First** — todos los datos se almacenan en SQLite local
+
+## Requisitos previos
+
+| Herramienta | Versión mínima | Instalación |
+|-------------|---------------|-------------|
+| Node.js | 20 LTS | [nodejs.org](https://nodejs.org) |
+| Rust | 1.77.2 | `rustup toolchain install stable` |
+| Tauri CLI | 2.x | `npm install -g @tauri-apps/cli` |
+
+## Inicio rápido (desarrollo)
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# 1. Instalar dependencias de Node
+npm install
+
+# 2. Iniciar el entorno de desarrollo Tauri (frontend + backend)
+npm run tauri:dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+> En Windows, puedes ejecutar `npm run setup:local` para configurar el entorno automáticamente.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Construcción para producción
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run tauri:build
+```
 
-## Learn More
+El instalador se generará en `src-tauri/target/release/bundle/`.
 
-To learn more about Next.js, take a look at the following resources:
+## Modelos de IA
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Los modelos no se incluyen en el repositorio por su tamaño. Se descargan desde la aplicación en **Ajustes → Modelos**:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Modelo | Uso | Tamaño aprox. |
+|--------|-----|---------------|
+| `ggml-large-v3-turbo.bin` | Transcripción de audio | ~1.5 GB |
+| `llama-3-8b-instruct.gguf` | Síntesis y papers | ~4.5 GB |
+| `biomedlm-2.7b.gguf` | Análisis clínico | ~2.0 GB |
 
-## Deploy on Vercel
+## Estructura del proyecto
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```
+neuroscribe/
+├── src/                   # Aplicación Next.js (frontend)
+│   ├── app/               # Rutas (App Router)
+│   │   ├── (dashboard)/   # Layout principal y páginas
+│   │   └── actions/       # Funciones que invocan comandos Tauri
+│   ├── components/        # Componentes React reutilizables
+│   ├── hooks/             # Hooks personalizados
+│   ├── lib/utils/         # Utilidades (cn, citation, verify)
+│   └── types/             # Tipos TypeScript globales
+├── src-tauri/             # Backend Rust (Tauri)
+│   ├── src/lib.rs         # Comandos Tauri (DB, IA, descarga)
+│   ├── migrations/        # Esquemas SQL de SQLite
+│   ├── bin/               # Sidecars (whisper-cli, llama-cli)
+│   └── tauri.conf.json    # Configuración de Tauri
+└── openspec/              # Especificaciones del proyecto (SDD)
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Scripts disponibles
+
+| Comando | Descripción |
+|---------|-------------|
+| `npm run dev` | Solo frontend Next.js en `localhost:3000` |
+| `npm run tauri:dev` | Frontend + backend Tauri en modo desarrollo |
+| `npm run tauri:build` | Construye el instalador de producción |
+| `npm run lint` | Ejecuta ESLint sobre el código TypeScript |
+
+## Licencia
+
+Propietario — © NeuroScribe. Todos los derechos reservados.

@@ -210,7 +210,7 @@ async fn check_license_internal(state: tauri::State<'_, SqlitePool>) -> Result<(
 
     if profile.is_activated { return Ok(()); }
 
-    // Si la fecha no existe, usamos la fecha de creaciÃ³n o el momento actual
+    // Si la fecha no existe, usamos la fecha de creación o el momento actual
     let raw_date = profile.trial_start_date.clone().unwrap_or_else(|| profile.created_at.clone());
 
     let start_date = chrono::NaiveDateTime::parse_from_str(&raw_date, "%Y-%m-%d %H:%M:%S")
@@ -220,10 +220,10 @@ async fn check_license_internal(state: tauri::State<'_, SqlitePool>) -> Result<(
         .unwrap_or_else(|_| chrono::Utc::now());
     
     let days_elapsed = chrono::Utc::now().signed_duration_since(start_date).num_days();
-    println!("DÃ­as de trial transcurridos: {}", days_elapsed);
+    log::debug!("Días de trial transcurridos: {}", days_elapsed);
 
     if days_elapsed > 30 {
-        return Err("Tu periodo de prueba de 30 dÃ­as ha expirado. Por favor, activa tu licencia.".to_string());
+        return Err("Tu periodo de prueba de 30 días ha expirado. Por favor, activa tu licencia.".to_string());
     }
     Ok(())
 }
@@ -232,8 +232,13 @@ async fn check_license_internal(state: tauri::State<'_, SqlitePool>) -> Result<(
 
 #[tauri::command]
 async fn verify_doi_local(doi: String) -> Result<bool, String> {
+    let clean_doi = doi.trim().trim_start_matches("https://doi.org/").trim_start_matches("http://doi.org/");
+    if clean_doi.is_empty() {
+        return Err("DOI no puede estar vacío.".to_string());
+    }
     let client = reqwest::Client::new();
-    let url = format!("https://api.crossref.org/works/{}?mailto=hola@neuroscribe.app", doi);
+    let encoded = urlencoding::encode(clean_doi);
+    let url = format!("https://api.crossref.org/works/{}?mailto=hola@neuroscribe.app", encoded);
     let res = client.get(url).send().await.map_err(|e| e.to_string())?;
     Ok(res.status().is_success())
 }
@@ -264,7 +269,8 @@ async fn get_academic_data_local(query: String, high_precision: bool) -> Result<
 }
 
 async fn fetch_pubmed(client: &reqwest::Client, query: &str) -> Result<Vec<AcademicWork>, String> {
-    let search_url = format!("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term={}&retmode=json&retmax=10", query);
+    let encoded_query = urlencoding::encode(query);
+    let search_url = format!("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term={}&retmode=json&retmax=10", encoded_query);
     let res = client.get(search_url).send().await.map_err(|e| e.to_string())?;
     let search_data: PubMedESearchResponse = res.json().await.map_err(|e| e.to_string())?;
     let ids = search_data.esearchresult.idlist;
@@ -295,7 +301,8 @@ async fn fetch_pubmed(client: &reqwest::Client, query: &str) -> Result<Vec<Acade
 }
 
 async fn fetch_openalex(client: &reqwest::Client, query: &str) -> Result<Vec<AcademicWork>, String> {
-    let url = format!("https://api.openalex.org/works?search={}&mailto=hola@neuroscribe.app", query);
+    let encoded_query = urlencoding::encode(query);
+    let url = format!("https://api.openalex.org/works?search={}&mailto=hola@neuroscribe.app", encoded_query);
     let res = client.get(url).send().await.map_err(|e| e.to_string())?;
     let data: OpenAlexResponse = res.json().await.map_err(|e| e.to_string())?;
     let mut works = Vec::new();
@@ -334,8 +341,15 @@ async fn db_get_folders(state: tauri::State<'_, SqlitePool>) -> Result<Vec<Folde
 
 #[tauri::command]
 async fn db_create_folder(name: &str, state: tauri::State<'_, SqlitePool>) -> Result<Folder, String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err("El nombre de la carpeta no puede estar vacío.".to_string());
+    }
+    if trimmed.len() > 100 {
+        return Err("El nombre de la carpeta no puede superar los 100 caracteres.".to_string());
+    }
     let id = Uuid::new_v4().to_string();
-    sqlx::query("INSERT INTO folders (id, name) VALUES (?, ?)").bind(&id).bind(name).execute(&*state).await.map_err(|e| e.to_string())?;
+    sqlx::query("INSERT INTO folders (id, name) VALUES (?, ?)").bind(&id).bind(trimmed).execute(&*state).await.map_err(|e| e.to_string())?;
     sqlx::query_as::<_, Folder>("SELECT *, 0 as count FROM folders WHERE id = ?").bind(&id).fetch_one(&*state).await.map_err(|e| e.to_string())
 }
 
@@ -415,27 +429,27 @@ async fn process_text_local(text: String, task: String, state: tauri::State<'_, 
 
 #[tauri::command(rename_all = "snake_case")]
 async fn transcribe_audio_local(audio_path: String, state: tauri::State<'_, SqlitePool>, handle: AppHandle) -> Result<String, String> {
-    println!("--- Iniciando TranscripciÃ³n Offline ---");
+    log::info!("--- Iniciando Transcripción Offline ---");
     
     // Timeout para la licencia para evitar bloqueos de DB
-    println!("Verificando licencia...");
+    log::info!("Verificando licencia...");
     tokio::time::timeout(std::time::Duration::from_secs(5), check_license_internal(state))
         .await
-        .map_err(|_| "Timeout verificando licencia (la base de datos podrÃ­a estar bloqueada)".to_string())??;
+        .map_err(|_| "Timeout verificando licencia (la base de datos podría estar bloqueada)".to_string())??;
     
     let app_dir = handle.path().app_data_dir().map_err(|e| e.to_string())?;
     let model_path = app_dir.join("models").join("ggml-large-v3-turbo.bin");
     
-    println!("Audio: {}", audio_path);
-    println!("Modelo: {}", model_path.display());
+    log::info!("Audio: {}", audio_path);
+    log::info!("Modelo: {}", model_path.display());
 
     if !model_path.exists() {
         return Err("Error: El archivo del modelo Whisper no existe en la carpeta de modelos.".to_string());
     }
 
     let hw = get_hardware_info();
-    let thread_count = (hw.cpu_cores as i32 - 1).max(1); // Usar casi todos los hilos disponibles para mÃ¡xima velocidad
-    println!("Usando {} hilos para la transcripciÃ³n...", thread_count);
+    let thread_count = (hw.cpu_cores as i32 - 1).max(1); // Usar casi todos los hilos disponibles para máxima velocidad
+    log::info!("Usando {} hilos para la transcripción...", thread_count);
 
     let shell = handle.shell();
     let sidecar = shell.sidecar("whisper-cli").map_err(|e| format!("No se pudo encontrar el sidecar: {}", e))?;
@@ -454,7 +468,7 @@ async fn transcribe_audio_local(audio_path: String, state: tauri::State<'_, Sqli
         .spawn()
         .map_err(|e| format!("Error al iniciar el proceso Whisper: {}", e))?;
 
-    println!("Proceso Whisper lanzado con {} hilos. Esperando respuesta...", thread_count);
+    log::info!("Proceso Whisper lanzado con {} hilos. Esperando respuesta...", thread_count);
     let mut stderr_log = String::new();
 
     while let Some(event) = rx.recv().await {
@@ -468,7 +482,7 @@ async fn transcribe_audio_local(audio_path: String, state: tauri::State<'_, Sqli
                 stderr_log.push_str(&err_line);
             }
             CommandEvent::Terminated(payload) => {
-                println!("Whisper terminado con cÃ³digo: {:?}", payload.code);
+                log::info!("Whisper terminado con código: {:?}", payload.code);
                 break;
             }
             _ => {}
@@ -476,16 +490,16 @@ async fn transcribe_audio_local(audio_path: String, state: tauri::State<'_, Sqli
     }
 
     let json_path = format!("{}_out.json", audio_path);
-    println!("Buscando resultado en: {}", json_path);
+    log::info!("Buscando resultado en: {}", json_path);
 
     if let Ok(json_content) = fs::read_to_string(&json_path) {
         let data: WhisperOutput = serde_json::from_str(&json_content)
             .map_err(|e| format!("Error en JSON de Whisper: {}. Stderr: {}", e, stderr_log))?;
         let _ = fs::remove_file(&json_path);
-        println!("Â¡TranscripciÃ³n completada con Ã©xito!");
+        log::info!("¡Transcripción completada con éxito!");
         Ok(data.text)
     } else {
-        Err(format!("Whisper no generÃ³ el archivo JSON. Stderr: {}", stderr_log))
+        Err(format!("Whisper no generó el archivo JSON. Stderr: {}", stderr_log))
     }
 }
 
@@ -524,7 +538,7 @@ async fn db_delete_model(model_name: &str, handle: AppHandle) -> Result<String, 
 
 #[tauri::command]
 async fn download_model(model_name: &str, handle: AppHandle) -> Result<String, String> { 
-    println!("--- Iniciando Descarga de Modelo: {} ---", model_name);
+    log::info!("--- Iniciando Descarga de Modelo: {} ---", model_name);
     
     let app_dir = handle.path().app_data_dir().map_err(|e| e.to_string())?;
     let models_dir = app_dir.join("models");
@@ -562,14 +576,14 @@ async fn download_model(model_name: &str, handle: AppHandle) -> Result<String, S
     // --- Estrategia Multisource ---
     let mirror_url = format!("https://models.neuroscribe.app/{}", filename);
     
-    println!("Intentando descarga desde Espejo: {}", mirror_url);
+    log::info!("Intentando descarga desde Espejo: {}", mirror_url);
     let mut response = match client.get(&mirror_url).send().await {
         Ok(res) if res.status().is_success() => {
-            println!("Espejo disponible. Iniciando descarga rápida...");
+            log::info!("Espejo disponible. Iniciando descarga rápida...");
             res
         },
         _ => {
-            println!("Espejo no disponible o archivo no encontrado. Usando HuggingFace como fallback...");
+            log::info!("Espejo no disponible o archivo no encontrado. Usando HuggingFace como fallback...");
             client.get(hf_url).send().await.map_err(|e| format!("Fallo total de conexión: {}", e))?
         }
     };
@@ -595,12 +609,9 @@ async fn download_model(model_name: &str, handle: AppHandle) -> Result<String, S
     }
 
     file.flush().await.map_err(|e| e.to_string())?;
-    println!("¡Descarga de {} completada!", filename);
+    log::info!("¡Descarga de {} completada!", filename);
     Ok(format!("Descarga exitosa: {}", filename))
 }
-
-#[tauri::command]
-fn greet(name: &str) -> String { format!("Hola, {}!", name) }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -624,18 +635,28 @@ pub fn run() {
       }
 
       tauri::async_runtime::block_on(async {
-          let opts = SqliteConnectOptions::from_str(&db_url)
-              .unwrap()
-              .create_if_missing(true);
+          let opts = match SqliteConnectOptions::from_str(&db_url) {
+              Ok(o) => o.create_if_missing(true),
+              Err(e) => {
+                  log::error!("Error parseando URL de base de datos: {}", e);
+                  return;
+              }
+          };
               
-          let pool = SqlitePool::connect_with(opts).await.unwrap();
+          let pool = match SqlitePool::connect_with(opts).await {
+              Ok(p) => p,
+              Err(e) => {
+                  log::error!("Error conectando a la base de datos: {}", e);
+                  return;
+              }
+          };
           
           // Ejecutar migraciones una por una ignorando errores de 'ya existe'
-          println!("Ejecutando migraciÃ³n 01...");
+          log::info!("Ejecutando migración 01...");
           let _ = sqlx::query(include_str!("../migrations/01_initial_schema.sql")).execute(&pool).await;
           
-          println!("Reparando/Verificando columnas de licencia (MigraciÃ³n 02)...");
-          // Ejecutamos cada alter table por separado para evitar que uno falle y detenga a los demÃ¡s
+          log::info!("Reparando/Verificando columnas de licencia (Migración 02)...");
+          // Ejecutamos cada alter table por separado para evitar que uno falle y detenga a los demás
           let _ = sqlx::query("ALTER TABLE profiles ADD COLUMN license_key TEXT").execute(&pool).await;
           let _ = sqlx::query("ALTER TABLE profiles ADD COLUMN trial_start_date DATETIME DEFAULT CURRENT_TIMESTAMP").execute(&pool).await;
           let _ = sqlx::query("ALTER TABLE profiles ADD COLUMN is_activated BOOLEAN DEFAULT 0").execute(&pool).await;
@@ -644,11 +665,11 @@ pub fn run() {
           // Asegurarnos de que el usuario local tenga una fecha de trial si la columna acaba de ser creada
           let _ = sqlx::query("UPDATE profiles SET trial_start_date = CURRENT_TIMESTAMP WHERE trial_start_date IS NULL").execute(&pool).await;
           
-          println!("Base de datos verificada y lista.");
+          log::info!("Base de datos verificada y lista.");
           app.manage(pool);
       });
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![greet, db_get_profile, db_get_folders, db_create_folder, db_get_documents, db_save_document, get_hardware_info, get_hardware_id, check_models, download_model, transcribe_audio_local, process_text_local, generate_research_paper_local, generate_quick_answer_local, activate_license, get_academic_data_local, verify_doi_local, check_mirror_health, db_delete_model])
+    .invoke_handler(tauri::generate_handler![db_get_profile, db_get_folders, db_create_folder, db_get_documents, db_save_document, get_hardware_info, get_hardware_id, check_models, download_model, transcribe_audio_local, process_text_local, generate_research_paper_local, generate_quick_answer_local, activate_license, get_academic_data_local, verify_doi_local, check_mirror_health, db_delete_model])
     .run(tauri::generate_context!()).expect("run");
 }

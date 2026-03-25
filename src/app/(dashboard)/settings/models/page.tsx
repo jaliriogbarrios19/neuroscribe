@@ -74,7 +74,7 @@ export default function ModelsManagerPage() {
         try {
             await invoke("download_model", { modelName });
             await refreshStatus();
-        } catch (error: any) {
+        } catch (error: unknown) {
             alert(`Error al descargar: ${error}`);
         } finally {
             setDownloading(null);
@@ -88,7 +88,7 @@ export default function ModelsManagerPage() {
         try {
             await invoke("db_delete_model", { modelName: modelId });
             await refreshStatus();
-        } catch (error: any) {
+        } catch (error: unknown) {
             alert(`Error al eliminar: ${error}`);
         }
     };
@@ -134,7 +134,7 @@ export default function ModelsManagerPage() {
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">Gestor de Modelos IA</h1>
                     <p className="mt-2 text-zinc-500 dark:text-zinc-400">
-                        Administra los "cerebros" locales de NeuroScribe para trabajar 100% offline.
+                        Administra los &quot;cerebros&quot; locales de NeuroScribe para trabajar 100% offline.
                     </p>
                 </div>
                 <button 

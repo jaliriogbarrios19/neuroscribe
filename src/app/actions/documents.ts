@@ -1,5 +1,15 @@
 import { invoke } from '@tauri-apps/api/core';
 
+export interface Document {
+  id: string;
+  folder_id: string | null;
+  title: string;
+  content: string | null;
+  document_type: 'transcript' | 'summary' | 'paper';
+  tokens_used: number;
+  created_at: string;
+}
+
 export async function saveDocument({
   id,
   title,
@@ -14,9 +24,9 @@ export async function saveDocument({
   folder_id?: string,
   type: 'transcript' | 'summary' | 'paper',
   tokens_used?: number
-}) {
+}): Promise<Document> {
   try {
-    const doc = await invoke<any>('db_save_document', {
+    const doc = await invoke<Document>('db_save_document', {
       id,
       folderId: folder_id,
       title,
@@ -31,9 +41,9 @@ export async function saveDocument({
   }
 }
 
-export async function getDocuments(folderId?: string) {
+export async function getDocuments(folderId?: string): Promise<Document[]> {
   try {
-    const docs = await invoke<any[]>('db_get_documents', { folderId });
+    const docs = await invoke<Document[]>('db_get_documents', { folderId });
     return docs;
   } catch (error) {
     console.error("Error fetching documents from local DB:", error);

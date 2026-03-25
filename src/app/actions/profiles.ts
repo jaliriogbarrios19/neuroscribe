@@ -33,7 +33,7 @@ export async function activateLicense(key: string): Promise<boolean> {
   }
 }
 
-export async function updateProfile(data: any) {
+export async function updateProfile(data: Partial<Omit<Profile, 'id' | 'created_at'>>) {
   // Nota: Dejamos esto mockeado por ahora ya que el perfil local es estático en el primer arranque
   console.log("[MOCK] updateProfile", data);
   return { id: "local-user", ...data };

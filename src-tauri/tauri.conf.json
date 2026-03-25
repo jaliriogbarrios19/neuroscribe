@@ -23,7 +23,7 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self'; connect-src 'self' https://eutils.ncbi.nlm.nih.gov https://api.openalex.org https://api.crossref.org https://huggingface.co https://models.neuroscribe.app; img-src 'self' data: asset: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
     }
   },
   "bundle": {

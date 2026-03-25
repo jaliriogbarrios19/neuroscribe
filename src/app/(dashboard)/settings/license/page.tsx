@@ -35,8 +35,9 @@ export default function LicensePage() {
         const updated = await getProfile();
         setProfile(updated);
       }
-    } catch (error: any) {
-      setMessage({ type: 'error', text: error || "Error al activar la licencia. Verifica la clave e intenta de nuevo." });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : (typeof error === 'string' ? error : "Error al activar la licencia. Verifica la clave e intenta de nuevo.");
+      setMessage({ type: 'error', text: msg });
     } finally {
       setActivating(false);
     }

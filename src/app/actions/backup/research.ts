@@ -7,6 +7,37 @@ import { verifyDOIWithCrossref } from "@/lib/utils/verify";
 const CONTACT_EMAIL = "hola@neuroscribe.app"; // Email para Polite Pool de OpenAlex y Crossref
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY;
 
+// --- Tipos locales para respuestas de APIs externas ---
+
+interface OpenAlexWorkRaw {
+  doi?: string;
+  display_name?: string;
+  title?: string;
+  publication_year?: number;
+  relevance_score?: number;
+  host_venue?: { display_name?: string };
+  open_access?: { oa_url?: string };
+  authorships?: Array<{ author: { display_name: string } }>;
+}
+
+interface PubMedArticleId {
+  idtype: string;
+  value: string;
+}
+
+interface PubMedAuthorRaw {
+  name: string;
+}
+
+interface PubMedArticleRaw {
+  title: string;
+  pubdate: string;
+  fulljournalname?: string;
+  source?: string;
+  articleids?: PubMedArticleId[];
+  authors?: PubMedAuthorRaw[];
+}
+
 /**
  * Orquestador principal de búsqueda académica (PubMed + OpenAlex).
  * Implementa de-duplicación basada en DOI.
@@ -53,10 +84,10 @@ async function fetchOpenAlex(query: string): Promise<AcademicWork[]> {
     
     const data = await response.json();
     
-    return data.results.map((work: any) => ({
+    return data.results.map((work: OpenAlexWorkRaw) => ({
       doi: work.doi || "",
       title: work.display_name || work.title,
-      authors: work.authorships?.map((a: any) => ({ name: a.author.display_name })) || [],
+      authors: work.authorships?.map((a) => ({ name: a.author.display_name })) || [],
       year: work.publication_year,
       journal: work.host_venue?.display_name,
       abstract: "", 
@@ -87,13 +118,13 @@ async function fetchPubMed(query: string): Promise<AcademicWork[]> {
     const summaryData = await summaryRes.json();
 
     return ids.map((id: string) => {
-      const item = summaryData.result[id];
-      const doi = item.articleids?.find((aid: any) => aid.idtype === "doi")?.value || "";
+      const item = summaryData.result[id] as PubMedArticleRaw;
+      const doi = item.articleids?.find((aid: PubMedArticleId) => aid.idtype === "doi")?.value || "";
       
       return {
         doi: doi ? `https://doi.org/${doi}` : "",
         title: item.title,
-        authors: item.authors?.map((a: any) => ({ name: a.name })) || [],
+        authors: item.authors?.map((a: PubMedAuthorRaw) => ({ name: a.name })) || [],
         year: parseInt(item.pubdate) || 0,
         journal: item.fulljournalname || item.source,
         abstract: "", 
