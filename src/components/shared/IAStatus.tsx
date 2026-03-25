@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getHardwareInfo, checkModelStatus, HardwareInfo, ModelStatus, downloadModel } from '@/app/actions/ia';
 import { Cpu, Database, CheckCircle2, AlertCircle, Download, Loader2 } from 'lucide-react';
 import { listen } from '@tauri-apps/api/event';
@@ -12,20 +12,7 @@ const IAStatus = () => {
   const [downloading, setDownloading] = useState<string | null>(null);
   const [progress, setProgress] = useState<number>(0);
 
-  useEffect(() => {
-    init();
-
-    // Escuchar progreso desde Rust
-    const unlisten = listen<number>('download-progress', (event) => {
-      setProgress(event.payload);
-    });
-
-    return () => {
-      unlisten.then(f => f());
-    };
-  }, []);
-
-  const init = async () => {
+  const refreshStatus = useCallback(async () => {
     setLoading(true);
     const [hw, status] = await Promise.all([
       getHardwareInfo(),
@@ -34,7 +21,32 @@ const IAStatus = () => {
     setHwInfo(hw);
     setModelStatus(status);
     setLoading(false);
-  };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      setLoading(true);
+      const [hw, status] = await Promise.all([getHardwareInfo(), checkModelStatus()]);
+      if (cancelled) return;
+      setHwInfo(hw);
+      setModelStatus(status);
+      setLoading(false);
+    };
+
+    load();
+
+    // Escuchar progreso desde Rust
+    const unlisten = listen<number>('download-progress', (event) => {
+      setProgress(event.payload);
+    });
+
+    return () => {
+      cancelled = true;
+      unlisten.then(f => f());
+    };
+  }, []);
 
   const handleDownload = async (name: string) => {
     setDownloading(name);
@@ -43,8 +55,7 @@ const IAStatus = () => {
       const result = await downloadModel(name);
       console.log(result);
       // Una vez terminada la descarga, actualizamos el estado visual
-      const status = await checkModelStatus();
-      setModelStatus(status);
+      await refreshStatus();
       setDownloading(null);
       setProgress(0);
     } catch (err) {

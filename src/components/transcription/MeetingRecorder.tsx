@@ -1,6 +1,6 @@
 'use client'
 
-import { ScreenShare, StopCircle, Circle, Loader2, Info } from "lucide-react";
+import { ScreenShare, StopCircle, Circle, Info } from "lucide-react";
 import { useState, useRef } from "react";
 
 interface MeetingRecorderProps {
@@ -86,7 +86,7 @@ const MeetingRecorder = ({ onRecordingComplete }: MeetingRecorderProps) => {
           <div className="text-center max-w-sm">
             <p className="text-sm font-semibold text-zinc-900 dark:text-white">Grabar Reunión Virtual</p>
             <p className="text-xs text-zinc-500 mt-2 dark:text-zinc-400">
-              Al hacer clic, selecciona la pestaña de **Google Meet o Zoom** y asegúrate de marcar la casilla <span className="font-bold text-indigo-600 dark:text-indigo-400">"Compartir audio de la pestaña"</span>.
+              Al hacer clic, selecciona la pestaña de **Google Meet o Zoom** y asegúrate de marcar la casilla <span className="font-bold text-indigo-600 dark:text-indigo-400">&quot;Compartir audio de la pestaña&quot;</span>.
             </p>
           </div>
           <button 

@@ -7,7 +7,7 @@ import { transcribeAudioLocal } from "@/app/actions/ia";
 
 // Importar APIs de Tauri solo si estamos en el entorno de escritorio
 const getTauriAPIs = async () => {
-  if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+  if (typeof window !== 'undefined' && (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
     const { writeFile, BaseDirectory } = await import('@tauri-apps/plugin-fs');
     const { cacheDir, join } = await import('@tauri-apps/api/path');
     const { listen } = await import('@tauri-apps/api/event');
@@ -34,15 +34,17 @@ const AudioUploader = ({ onTranscriptionComplete }: AudioUploaderProps) => {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    let unlisten: any;
+    let unlisten: (() => void) | null = null;
 
     const setupListener = async () => {
       const apis = await getTauriAPIs();
       if (apis?.listen) {
-        unlisten = await apis.listen('transcription-progress', (event: any) => {
-          const p = (event.payload as { progress: number }).progress;
-          setProgress(p);
-          setStatus(`Transcribiendo... (${p}%)`);
+        unlisten = await apis.listen<string>('transcription-progress', (event) => {
+          // El evento trae algo como "[00:01.000 -> 00:05.000]"
+          const parts = String(event.payload).split(' -> ');
+          const label = parts[1] ? parts[1].replace(']', '') : String(event.payload);
+          setStatus(`Procesando: ${label}`);
+          setProgress((prev) => Math.min(prev + 1, 95));
         });
       }
     };
@@ -114,25 +116,6 @@ const AudioUploader = ({ onTranscriptionComplete }: AudioUploaderProps) => {
     setStatus("");
   };
 
-  useEffect(() => {
-    let unlisten: (() => void) | null = null;
-    
-    async function setupListener() {
-      const { listen } = await import('@tauri-apps/api/event');
-      unlisten = await listen<string>('transcription-progress', (event) => {
-        // El evento trae algo como "[00:01.000 -> 00:05.000]"
-        // Podemos usar esto para dar una sensaciÃ³n de avance constante
-        setStatus(`Procesando: ${event.payload.split(' -> ')[1].replace(']', '')}`);
-        setProgress((prev) => Math.min(prev + 1, 95)); // Incrementar ligeramente el progreso
-      });
-    }
-
-    setupListener();
-    return () => {
-      if (unlisten) unlisten();
-    };
-  }, []);
-
   const handleUpload = async () => {
     if (!file) return;
     setIsUploading(true);
@@ -174,13 +157,12 @@ const AudioUploader = ({ onTranscriptionComplete }: AudioUploaderProps) => {
         setStatus("");
       }, 1000);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error processing audio:", error);
-      const errorMsg = error.message || (typeof error === 'string' ? error : "Error desconocido en la transcripciÃ³n.");
+      const errorMsg = error instanceof Error ? error.message : (typeof error === 'string' ? error : "Error desconocido en la transcripción.");
       setStatus(`Error: ${errorMsg}`);
       setIsUploading(false);
-      // Alerta de emergencia para romper el silencio
-      alert(`Fallo en la transcripciÃ³n: ${errorMsg}`);
+      alert(`Fallo en la transcripción: ${errorMsg}`);
     }
   };
 

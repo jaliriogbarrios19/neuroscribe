@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { AcademicWork, ResearchResponse } from "@/types/research";
+import { AcademicWork } from "@/types/research";
 
 /**
  * Orquestador de búsqueda académica en el backend de Rust.
@@ -73,7 +73,7 @@ export async function searchResearch(query: string) {
   return getAcademicData(query);
 }
 
-export async function saveResearch(data: any) {
+export async function saveResearch(data: { query?: string; results?: AcademicWork[] }) {
   console.log("[MOCK] saveResearch", data);
   return { id: "mock-res-" + Date.now(), ...data };
 }

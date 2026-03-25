@@ -3,13 +3,13 @@
 import { Folder, FolderPlus, Search, User, Loader2, Plus, X, Cpu } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { getFolders, createFolder } from "@/app/actions/folders";
-import { getProfile } from "@/app/actions/profiles";
+import { getFolders, createFolder, Folder as FolderType } from "@/app/actions/folders";
+import { getProfile, Profile } from "@/app/actions/profiles";
 import IAStatus from "./IAStatus";
 
 const Sidebar = () => {
-  const [folders, setFolders] = useState<any[]>([]);
-  const [profile, setProfile] = useState<any>(null);
+  const [folders, setFolders] = useState<FolderType[]>([]);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
