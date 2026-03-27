@@ -40,3 +40,12 @@ export async function getDocuments(folderId?: string) {
     return [];
   }
 }
+
+export async function deleteDocument(id: string) {
+  try {
+    await invoke('db_delete_document', { id });
+  } catch (error) {
+    console.error('Error deleting document from local DB:', error);
+    throw error;
+  }
+}

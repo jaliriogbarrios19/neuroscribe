@@ -357,6 +357,16 @@ async fn db_save_document(id: Option<String>, folder_id: Option<String>, title: 
     sqlx::query_as::<_, Document>("SELECT id, folder_id, title, content, type as document_type, tokens_used, created_at FROM documents WHERE id = ?").bind(&final_id).fetch_one(&*state).await.map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn db_delete_document(id: &str, state: tauri::State<'_, SqlitePool>) -> Result<(), String> {
+    sqlx::query("DELETE FROM documents WHERE id = ?")
+        .bind(id)
+        .execute(&*state)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 // --- Comandos de IA y Hardware ---
 
 #[tauri::command]
@@ -649,6 +659,6 @@ pub fn run() {
       });
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![greet, db_get_profile, db_get_folders, db_create_folder, db_get_documents, db_save_document, get_hardware_info, get_hardware_id, check_models, download_model, transcribe_audio_local, process_text_local, generate_research_paper_local, generate_quick_answer_local, activate_license, get_academic_data_local, verify_doi_local, check_mirror_health, db_delete_model])
+    .invoke_handler(tauri::generate_handler![greet, db_get_profile, db_get_folders, db_create_folder, db_get_documents, db_save_document, db_delete_document, get_hardware_info, get_hardware_id, check_models, download_model, transcribe_audio_local, process_text_local, generate_research_paper_local, generate_quick_answer_local, activate_license, get_academic_data_local, verify_doi_local, check_mirror_health, db_delete_model])
     .run(tauri::generate_context!()).expect("run");
 }

@@ -1,19 +1,33 @@
 'use client';
 
 import Editor from '@/components/editor/Editor';
-import { Loader2, Save, Sparkles } from 'lucide-react';
-import { useState } from 'react';
+import { Loader2, Save, Sparkles, CheckCircle2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { saveDocument } from '@/app/actions/documents';
 import { generateSummaryLocal } from '@/app/actions/ia';
+import { useUI } from '@/hooks/useUI';
 
 export default function DashboardPage() {
+  const { activeDocument, clearActiveDocument, activeFolder } = useUI();
+
   const [editorContent, setEditorContent] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [savedFeedback, setSavedFeedback] = useState(false);
   const [currentDocTitle, setCurrentDocTitle] = useState('Nuevo Documento');
   const [currentDocId, setCurrentDocId] = useState<string | undefined>(
     undefined
   );
+
+  /** When a document is opened from FolderView, load it into the editor. */
+  useEffect(() => {
+    if (activeDocument) {
+      setCurrentDocId(activeDocument.id);
+      setCurrentDocTitle(activeDocument.title);
+      setEditorContent(activeDocument.content);
+      clearActiveDocument();
+    }
+  }, [activeDocument, clearActiveDocument]);
 
   const handleGenerateSummary = async () => {
     if (!editorContent.trim()) return;
@@ -37,12 +51,14 @@ export default function DashboardPage() {
     try {
       const doc = await saveDocument({
         id: currentDocId,
+        folder_id: activeFolder?.id,
         title: currentDocTitle,
         content: editorContent,
         type: 'transcript',
       });
       setCurrentDocId(doc.id);
-      alert('¡Documento guardado con éxito!');
+      setSavedFeedback(true);
+      setTimeout(() => setSavedFeedback(false), 2000);
     } catch (error) {
       console.error('Error saving:', error);
       alert('Error al guardar el documento.');
@@ -62,8 +78,17 @@ export default function DashboardPage() {
             className="text-2xl font-bold bg-transparent border-none focus:outline-none focus:ring-0 w-full p-0 dark:text-white"
             placeholder="Título del documento..."
           />
-          <p className="text-zinc-500 dark:text-zinc-400">
-            {currentDocId ? 'Editando...' : 'Borrador sin guardar'}
+          <p className="text-zinc-500 dark:text-zinc-400 text-sm">
+            {activeFolder ? (
+              <span>
+                📁 <span className="font-medium">{activeFolder.name}</span>
+                {currentDocId ? ' · Editando' : ' · Borrador sin guardar'}
+              </span>
+            ) : currentDocId ? (
+              'Editando...'
+            ) : (
+              'Borrador sin guardar'
+            )}
           </p>
         </div>
         <div className="flex gap-3">
@@ -84,12 +109,18 @@ export default function DashboardPage() {
             disabled={isSaving}
             className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-indigo-700 disabled:opacity-50"
           >
-            {isSaving ? (
-              <Loader2 size={18} className="animate-spin" />
+            {savedFeedback ? (
+              <CheckCircle2 size={18} className="mr-2" />
+            ) : isSaving ? (
+              <Loader2 size={18} className="animate-spin mr-2" />
             ) : (
               <Save size={18} className="mr-2" />
             )}
-            {isSaving ? 'Guardando...' : 'Guardar Cambios'}
+            {savedFeedback
+              ? '¡Guardado!'
+              : isSaving
+                ? 'Guardando...'
+                : 'Guardar'}
           </button>
         </div>
       </div>

@@ -2,6 +2,13 @@
 
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 
+/** Documento minimal para pasar desde el explorador al editor. */
+export interface OpenableDocument {
+  id: string;
+  title: string;
+  content: string;
+}
+
 interface UIContextType {
   isResearchOpen: boolean;
   setIsResearchOpen: (open: boolean) => void;
@@ -13,6 +20,13 @@ interface UIContextType {
   transcriptionContent: string | null;
   injectTranscriptionContent: (content: string) => void;
   clearTranscriptionContent: () => void;
+  /** Carpeta activa en la sidebar — null = sin filtro */
+  activeFolder: { id: string; name: string } | null;
+  setActiveFolder: (folder: { id: string; name: string } | null) => void;
+  /** Documento actualmente cargado en el editor */
+  activeDocument: OpenableDocument | null;
+  openDocument: (doc: OpenableDocument) => void;
+  clearActiveDocument: () => void;
 }
 
 const UIContext = createContext<UIContextType | undefined>(undefined);
@@ -24,6 +38,13 @@ export function UIProvider({ children }: { children: ReactNode }) {
   const [transcriptionContent, setTranscriptionContent] = useState<
     string | null
   >(null);
+  const [activeFolder, setActiveFolder] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [activeDocument, setActiveDocument] = useState<OpenableDocument | null>(
+    null
+  );
 
   const injectResearchContent = (content: string) => {
     setResearchContent(content);
@@ -41,6 +62,14 @@ export function UIProvider({ children }: { children: ReactNode }) {
     setTranscriptionContent(null);
   };
 
+  const openDocument = (doc: OpenableDocument) => {
+    setActiveDocument(doc);
+  };
+
+  const clearActiveDocument = () => {
+    setActiveDocument(null);
+  };
+
   return (
     <UIContext.Provider
       value={{
@@ -54,6 +83,11 @@ export function UIProvider({ children }: { children: ReactNode }) {
         transcriptionContent,
         injectTranscriptionContent,
         clearTranscriptionContent,
+        activeFolder,
+        setActiveFolder,
+        activeDocument,
+        openDocument,
+        clearActiveDocument,
       }}
     >
       {children}
