@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import React from 'react';
 import {
   User,
@@ -94,7 +94,10 @@ const SpeakerPanel = ({
   onComplete,
   onCancel,
 }: SpeakerPanelProps) => {
-  const speakers = detectSpeakers(rawTranscription);
+  const speakers = useMemo(
+    () => detectSpeakers(rawTranscription),
+    [rawTranscription]
+  );
   const [assignments, setAssignments] = useState<
     Record<string, SpeakerAssignment>
   >(

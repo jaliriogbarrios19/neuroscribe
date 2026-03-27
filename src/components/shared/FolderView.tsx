@@ -10,7 +10,11 @@ import {
   Plus,
   Calendar,
 } from 'lucide-react';
-import { getDocuments, deleteDocument } from '@/app/actions/documents';
+import {
+  getDocuments,
+  deleteDocument,
+  DocumentEntry,
+} from '@/app/actions/documents';
 import { useUI } from '@/hooks/useUI';
 import { cn } from '@/lib/utils/cn';
 
@@ -35,14 +39,6 @@ interface FolderViewProps {
   onNewDocument: () => void;
 }
 
-interface DocEntry {
-  id: string;
-  title: string;
-  content: string;
-  document_type: string;
-  created_at: string;
-}
-
 const FolderView = ({
   folderId,
   folderName,
@@ -50,7 +46,7 @@ const FolderView = ({
   onNewDocument,
 }: FolderViewProps) => {
   const { openDocument } = useUI();
-  const [docs, setDocs] = useState<DocEntry[]>([]);
+  const [docs, setDocs] = useState<DocumentEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
 
@@ -58,7 +54,7 @@ const FolderView = ({
     setLoading(true);
     try {
       const result = await getDocuments(folderId);
-      setDocs(result as DocEntry[]);
+      setDocs(result);
     } finally {
       setLoading(false);
     }
@@ -69,7 +65,7 @@ const FolderView = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [folderId]);
 
-  const handleOpen = (doc: DocEntry) => {
+  const handleOpen = (doc: DocumentEntry) => {
     openDocument({ id: doc.id, title: doc.title, content: doc.content ?? '' });
     onClose();
   };

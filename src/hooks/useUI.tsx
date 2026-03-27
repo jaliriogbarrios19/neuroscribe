@@ -1,6 +1,12 @@
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useState,
+  ReactNode,
+} from 'react';
 
 /** Documento minimal para pasar desde el explorador al editor. */
 export interface OpenableDocument {
@@ -46,29 +52,29 @@ export function UIProvider({ children }: { children: ReactNode }) {
     null
   );
 
-  const injectResearchContent = (content: string) => {
+  const injectResearchContent = useCallback((content: string) => {
     setResearchContent(content);
-  };
+  }, []);
 
-  const clearResearchContent = () => {
+  const clearResearchContent = useCallback(() => {
     setResearchContent(null);
-  };
+  }, []);
 
-  const injectTranscriptionContent = (content: string) => {
+  const injectTranscriptionContent = useCallback((content: string) => {
     setTranscriptionContent(content);
-  };
+  }, []);
 
-  const clearTranscriptionContent = () => {
+  const clearTranscriptionContent = useCallback(() => {
     setTranscriptionContent(null);
-  };
+  }, []);
 
-  const openDocument = (doc: OpenableDocument) => {
+  const openDocument = useCallback((doc: OpenableDocument) => {
     setActiveDocument(doc);
-  };
+  }, []);
 
-  const clearActiveDocument = () => {
+  const clearActiveDocument = useCallback(() => {
     setActiveDocument(null);
-  };
+  }, []);
 
   return (
     <UIContext.Provider

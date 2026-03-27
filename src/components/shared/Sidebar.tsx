@@ -13,8 +13,8 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
-import { getFolders, createFolder } from '@/app/actions/folders';
-import { getProfile } from '@/app/actions/profiles';
+import { getFolders, createFolder, FolderEntry } from '@/app/actions/folders';
+import { getProfile, Profile } from '@/app/actions/profiles';
 import IAStatus from './IAStatus';
 import FolderView from './FolderView';
 import { useUI } from '@/hooks/useUI';
@@ -22,8 +22,8 @@ import { cn } from '@/lib/utils/cn';
 
 const Sidebar = () => {
   const { activeFolder, setActiveFolder, setIsUploaderOpen } = useUI();
-  const [folders, setFolders] = useState<any[]>([]);
-  const [profile, setProfile] = useState<any>(null);
+  const [folders, setFolders] = useState<FolderEntry[]>([]);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');

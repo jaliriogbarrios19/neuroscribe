@@ -35,7 +35,7 @@ export default function DashboardPage() {
     try {
       const summary = await generateSummaryLocal(editorContent, 'summary');
       setEditorContent(
-        prev =>
+        (prev: string) =>
           `${prev}<br/><hr/><br/><h2>Resumen Clínico (IA Local)</h2>${summary}`
       );
     } catch (error) {
@@ -74,7 +74,9 @@ export default function DashboardPage() {
           <input
             type="text"
             value={currentDocTitle}
-            onChange={e => setCurrentDocTitle(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              setCurrentDocTitle(e.target.value)
+            }
             className="text-2xl font-bold bg-transparent border-none focus:outline-none focus:ring-0 w-full p-0 dark:text-white"
             placeholder="Título del documento..."
           />
