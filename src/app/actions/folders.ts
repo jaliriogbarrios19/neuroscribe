@@ -5,7 +5,7 @@ export async function getFolders() {
     const folders = await invoke<any[]>('db_get_folders');
     return folders;
   } catch (error) {
-    console.error("Error fetching folders from local DB:", error);
+    console.error('Error fetching folders from local DB:', error);
     return [];
   }
 }
@@ -15,7 +15,7 @@ export async function createFolder(name: string) {
     const folder = await invoke<any>('db_create_folder', { name });
     return folder;
   } catch (error) {
-    console.error("Error creating folder in local DB:", error);
+    console.error('Error creating folder in local DB:', error);
     throw error;
   }
 }

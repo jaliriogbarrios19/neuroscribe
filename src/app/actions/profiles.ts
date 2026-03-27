@@ -18,7 +18,7 @@ export async function getProfile(): Promise<Profile | null> {
     const profile = await invoke<Profile>('db_get_profile');
     return profile;
   } catch (error) {
-    console.error("Error fetching profile from local DB:", error);
+    console.error('Error fetching profile from local DB:', error);
     return null;
   }
 }
@@ -28,13 +28,13 @@ export async function activateLicense(key: string): Promise<boolean> {
     const success = await invoke<boolean>('activate_license', { key });
     return success;
   } catch (error) {
-    console.error("Error activating license:", error);
+    console.error('Error activating license:', error);
     throw error;
   }
 }
 
 export async function updateProfile(data: any) {
   // Nota: Dejamos esto mockeado por ahora ya que el perfil local es estático en el primer arranque
-  console.log("[MOCK] updateProfile", data);
-  return { id: "local-user", ...data };
+  console.log('[MOCK] updateProfile', data);
+  return { id: 'local-user', ...data };
 }

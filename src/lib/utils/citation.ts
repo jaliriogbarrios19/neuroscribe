@@ -4,7 +4,9 @@ import { CitationResult } from '@/types/research';
 /**
  * Formatea un DOI o metadatos JSON a APA 7 utilizando citation-js.
  */
-export async function formatToAPA(input: string | object): Promise<CitationResult> {
+export async function formatToAPA(
+  input: string | object
+): Promise<CitationResult> {
   try {
     const cite = new Cite(input);
 
@@ -12,13 +14,13 @@ export async function formatToAPA(input: string | object): Promise<CitationResul
     const reference = cite.format('bibliography', {
       format: 'html',
       template: 'apa',
-      lang: 'es-ES'
+      lang: 'es-ES',
     });
 
     // Formato de cita en el texto (Smith, 2023)
     const inText = cite.format('citation', {
       template: 'apa',
-      lang: 'es-ES'
+      lang: 'es-ES',
     });
 
     // Formatos adicionales para exportación
@@ -29,7 +31,7 @@ export async function formatToAPA(input: string | object): Promise<CitationResul
       inText,
       reference,
       bibtex,
-      ris
+      ris,
     };
   } catch (error) {
     console.error('Error formatting citation:', error);

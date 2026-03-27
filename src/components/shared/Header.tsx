@@ -1,10 +1,10 @@
-'use client'
+'use client';
 
-import { Mic, Search, Settings, User, ShieldCheck, Clock } from "lucide-react";
-import Link from "next/link";
-import { useEffect, useState } from "react";
-import { getProfile, Profile } from "@/app/actions/profiles";
-import { cn } from "@/lib/utils/cn";
+import { Mic, Search, Settings, User, ShieldCheck, Clock } from 'lucide-react';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { getProfile, Profile } from '@/app/actions/profiles';
+import { cn } from '@/lib/utils/cn';
 
 interface HeaderProps {
   onTranscriptionClick?: () => void;
@@ -20,7 +20,7 @@ const Header = ({ onTranscriptionClick, onResearchClick }: HeaderProps) => {
       const p = await getProfile();
       if (p) {
         setProfile(p);
-        
+
         // Calcular días de trial
         const start = new Date(p.trial_start_date);
         const now = new Date();
@@ -55,12 +55,15 @@ const Header = ({ onTranscriptionClick, onResearchClick }: HeaderProps) => {
                   LICENCIA ACTIVA
                 </div>
               ) : (
-                <Link href="/settings/license" className={cn(
-                  "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold border transition-all hover:shadow-sm",
-                  trialDays !== null && trialDays <= 7 
-                    ? "bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800"
-                    : "bg-indigo-50 text-indigo-700 border-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-400 dark:border-indigo-800"
-                )}>
+                <Link
+                  href="/settings/license"
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold border transition-all hover:shadow-sm',
+                    trialDays !== null && trialDays <= 7
+                      ? 'bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800'
+                      : 'bg-indigo-50 text-indigo-700 border-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-400 dark:border-indigo-800'
+                  )}
+                >
                   <Clock size={12} />
                   PRUEBA: {trialDays} DÍAS RESTANTES
                 </Link>
@@ -68,16 +71,16 @@ const Header = ({ onTranscriptionClick, onResearchClick }: HeaderProps) => {
             </div>
           )}
         </div>
-        
+
         <nav className="hidden md:flex items-center gap-8">
-          <button 
+          <button
             onClick={onTranscriptionClick}
             className="flex items-center gap-2 text-sm font-medium text-zinc-600 hover:text-indigo-600 dark:text-zinc-400 dark:hover:text-indigo-400 transition-colors"
           >
             <Mic size={18} />
             Transcripción
           </button>
-          <button 
+          <button
             onClick={onResearchClick}
             className="flex items-center gap-2 text-sm font-medium text-zinc-600 hover:text-indigo-600 dark:text-zinc-400 dark:hover:text-indigo-400 transition-colors"
           >
@@ -87,7 +90,10 @@ const Header = ({ onTranscriptionClick, onResearchClick }: HeaderProps) => {
         </nav>
 
         <div className="flex items-center gap-4">
-          <Link href="/settings" className="p-2 text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors">
+          <Link
+            href="/settings"
+            className="p-2 text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors"
+          >
             <Settings size={20} />
           </Link>
           <button className="p-2 text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 border border-zinc-200 rounded-full dark:border-zinc-700 transition-colors">

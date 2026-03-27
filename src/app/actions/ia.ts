@@ -21,7 +21,7 @@ export async function getHardwareInfo(): Promise<HardwareInfo | null> {
   try {
     return await invoke<HardwareInfo>('get_hardware_info');
   } catch (err) {
-    console.error("Error fetching hardware info:", err);
+    console.error('Error fetching hardware info:', err);
     return null;
   }
 }
@@ -33,7 +33,7 @@ export async function checkModelStatus(): Promise<ModelStatus | null> {
   try {
     return await invoke<ModelStatus>('check_models');
   } catch (err) {
-    console.error("Error checking models status:", err);
+    console.error('Error checking models status:', err);
     return null;
   }
 }
@@ -45,7 +45,7 @@ export async function downloadModel(modelName: string): Promise<string> {
   try {
     return await invoke<string>('download_model', { modelName });
   } catch (err) {
-    console.error("Error starting download:", err);
+    console.error('Error starting download:', err);
     throw err;
   }
 }
@@ -54,12 +54,16 @@ export async function downloadModel(modelName: string): Promise<string> {
  * Invoca el orquestador de transcripciÃ³n local.
  * @param audio_path Ruta absoluta del archivo en disco.
  */
-export async function transcribeAudioLocal(audio_path: string): Promise<string> {
+export async function transcribeAudioLocal(
+  audio_path: string
+): Promise<string> {
   try {
     return await invoke<string>('transcribe_audio_local', { audio_path });
   } catch (err) {
-    console.error("Error in local transcription:", err);
-    throw new Error(typeof err === 'string' ? err : "Fallo en la transcripciÃ³n offline.");
+    console.error('Error in local transcription:', err);
+    throw new Error(
+      typeof err === 'string' ? err : 'Fallo en la transcripciÃ³n offline.'
+    );
   }
 }
 
@@ -68,11 +72,16 @@ export async function transcribeAudioLocal(audio_path: string): Promise<string> 
  * @param text Texto a procesar (transcripciÃ³n).
  * @param task Tipo de tarea ('summary' | 'paper').
  */
-export async function generateSummaryLocal(text: string, task: 'summary' | 'paper' = 'summary'): Promise<string> {
+export async function generateSummaryLocal(
+  text: string,
+  task: 'summary' | 'paper' = 'summary'
+): Promise<string> {
   try {
     return await invoke<string>('process_text_local', { text, task });
   } catch (err) {
-    console.error("Error in local LLM inference:", err);
-    throw new Error(typeof err === 'string' ? err : "Fallo en el anÃ¡lisis clÃ­nico offline.");
+    console.error('Error in local LLM inference:', err);
+    throw new Error(
+      typeof err === 'string' ? err : 'Fallo en el anÃ¡lisis clÃ­nico offline.'
+    );
   }
 }

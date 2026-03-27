@@ -1,4 +1,4 @@
-import { Extension } from '@tiptap/core'
+import { Extension } from '@tiptap/core';
 
 /**
  * Extensión para soportar estilos APA 7 en TipTap.
@@ -16,12 +16,12 @@ export const APA7 = Extension.create({
             default: null,
             parseHTML: element => element.getAttribute('class'),
             renderHTML: attributes => {
-              if (!attributes.class) return {}
-              return { class: attributes.class }
+              if (!attributes.class) return {};
+              return { class: attributes.class };
             },
           },
         },
       },
-    ]
+    ];
   },
-})
+});

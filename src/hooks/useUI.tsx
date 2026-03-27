@@ -1,4 +1,4 @@
-'use client'
+'use client';
 
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 
@@ -21,7 +21,9 @@ export function UIProvider({ children }: { children: ReactNode }) {
   const [isResearchOpen, setIsResearchOpen] = useState(false);
   const [isUploaderOpen, setIsUploaderOpen] = useState(false);
   const [researchContent, setResearchContent] = useState<string | null>(null);
-  const [transcriptionContent, setTranscriptionContent] = useState<string | null>(null);
+  const [transcriptionContent, setTranscriptionContent] = useState<
+    string | null
+  >(null);
 
   const injectResearchContent = (content: string) => {
     setResearchContent(content);
@@ -40,18 +42,20 @@ export function UIProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <UIContext.Provider value={{ 
-      isResearchOpen, 
-      setIsResearchOpen, 
-      isUploaderOpen,
-      setIsUploaderOpen,
-      researchContent, 
-      injectResearchContent, 
-      clearResearchContent,
-      transcriptionContent,
-      injectTranscriptionContent,
-      clearTranscriptionContent
-    }}>
+    <UIContext.Provider
+      value={{
+        isResearchOpen,
+        setIsResearchOpen,
+        isUploaderOpen,
+        setIsUploaderOpen,
+        researchContent,
+        injectResearchContent,
+        clearResearchContent,
+        transcriptionContent,
+        injectTranscriptionContent,
+        clearTranscriptionContent,
+      }}
+    >
       {children}
     </UIContext.Provider>
   );

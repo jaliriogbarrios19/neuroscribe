@@ -6,14 +6,14 @@ export async function saveDocument({
   content,
   folder_id,
   type,
-  tokens_used = 0
+  tokens_used = 0,
 }: {
-  id?: string,
-  title: string,
-  content: string,
-  folder_id?: string,
-  type: 'transcript' | 'summary' | 'paper',
-  tokens_used?: number
+  id?: string;
+  title: string;
+  content: string;
+  folder_id?: string;
+  type: 'transcript' | 'summary' | 'paper';
+  tokens_used?: number;
 }) {
   try {
     const doc = await invoke<any>('db_save_document', {
@@ -22,11 +22,11 @@ export async function saveDocument({
       title,
       content,
       docType: type,
-      tokens: tokens_used
+      tokens: tokens_used,
     });
     return doc;
   } catch (error) {
-    console.error("Error saving document in local DB:", error);
+    console.error('Error saving document in local DB:', error);
     throw error;
   }
 }
@@ -36,7 +36,7 @@ export async function getDocuments(folderId?: string) {
     const docs = await invoke<any[]>('db_get_documents', { folderId });
     return docs;
   } catch (error) {
-    console.error("Error fetching documents from local DB:", error);
+    console.error('Error fetching documents from local DB:', error);
     return [];
   }
 }

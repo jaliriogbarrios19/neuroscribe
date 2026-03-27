@@ -13,7 +13,7 @@ export interface AcademicWork {
 export interface SearchOptions {
   query: string;
   high_precision: boolean; // Si es true, usa filtrado MeSH
-  domain: "medicine" | "psychology" | "general";
+  domain: 'medicine' | 'psychology' | 'general';
 }
 
 export interface CitationResult {
