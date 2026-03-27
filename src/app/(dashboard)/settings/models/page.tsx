@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
 import {
   Download,
   CheckCircle2,
@@ -15,70 +14,32 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
-
-interface ModelStatus {
-  whisper_ready: boolean;
-  llama_ready: boolean;
-  biomed_ready: boolean;
-  models_path: string;
-}
-
-interface HardwareInfo {
-  total_ram_gb: number;
-  available_ram_gb: number;
-  cpu_cores: number;
-  recommended_model: string;
-}
+import { useModels } from '@/hooks/useModels';
 
 export default function ModelsManagerPage() {
-  const [status, setStatus] = useState<ModelStatus | null>(null);
-  const [hwInfo, setHwInfo] = useState<HardwareInfo | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [downloading, setDownloading] = useState<string | null>(null);
-  const [progress, setProgress] = useState(0);
+  const {
+    modelStatus: status,
+    hwInfo,
+    loading,
+    downloading,
+    progress,
+    refreshStatus,
+    startDownload,
+  } = useModels();
+
   const [mirrorOnline, setMirrorOnline] = useState<boolean | null>(null);
 
   useEffect(() => {
-    refreshStatus();
-
-    const unlisten = listen<number>('download-progress', event => {
-      setProgress(event.payload);
-    });
-
-    return () => {
-      unlisten.then(f => f());
-    };
+    invoke<boolean>('check_mirror_health')
+      .then(setMirrorOnline)
+      .catch(() => setMirrorOnline(false));
   }, []);
 
-  const refreshStatus = async () => {
-    setLoading(true);
-    try {
-      const [s, hw, mirror] = await Promise.all([
-        invoke<ModelStatus>('check_models'),
-        invoke<HardwareInfo>('get_hardware_info'),
-        invoke<boolean>('check_mirror_health').catch(() => false),
-      ]);
-      setStatus(s);
-      setHwInfo(hw);
-      setMirrorOnline(mirror);
-    } catch (error) {
-      console.error('Error refreshing status:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleDownload = async (modelName: string) => {
-    setDownloading(modelName);
-    setProgress(0);
     try {
-      await invoke('download_model', { modelName });
-      await refreshStatus();
-    } catch (error: any) {
+      await startDownload(modelName);
+    } catch (error) {
       alert(`Error al descargar: ${error}`);
-    } finally {
-      setDownloading(null);
-      setProgress(0);
     }
   };
 
@@ -93,7 +54,7 @@ export default function ModelsManagerPage() {
     try {
       await invoke('db_delete_model', { modelName: modelId });
       await refreshStatus();
-    } catch (error: any) {
+    } catch (error) {
       alert(`Error al eliminar: ${error}`);
     }
   };

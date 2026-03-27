@@ -5,6 +5,7 @@ import StarterKit from '@tiptap/starter-kit';
 import { useEffect } from 'react';
 import { useUI } from '@/hooks/useUI';
 import { APA7 } from './extensions/APA7';
+import EditorBubbleMenu from './EditorBubbleMenu';
 
 interface EditorProps {
   content?: string;
@@ -66,6 +67,7 @@ const Editor = ({ content, onChange }: EditorProps) => {
 
   return (
     <div className="w-full bg-white dark:bg-zinc-900">
+      {editor && <EditorBubbleMenu editor={editor} />}
       <EditorContent editor={editor} />
     </div>
   );

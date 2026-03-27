@@ -1,5 +1,6 @@
 import DashboardShell from '@/components/shared/DashboardShell';
 import { UIProvider } from '@/hooks/useUI';
+import { ModelProvider } from '@/hooks/useModels';
 
 export default function DashboardLayout({
   children,
@@ -8,7 +9,9 @@ export default function DashboardLayout({
 }) {
   return (
     <UIProvider>
-      <DashboardShell>{children}</DashboardShell>
+      <ModelProvider>
+        <DashboardShell>{children}</DashboardShell>
+      </ModelProvider>
     </UIProvider>
   );
 }

@@ -85,3 +85,39 @@ export async function generateSummaryLocal(
     );
   }
 }
+
+/** Prompts de sistema para acciones inline del editor (Spanish). */
+const EDITOR_ACTION_PROMPTS: Record<
+  'explain' | 'summarize' | 'continue',
+  string
+> = {
+  explain:
+    'Explica el siguiente texto de forma clara y concisa en español, como si se lo explicaras a un colega de salud.',
+  summarize:
+    'Resume el siguiente texto de forma breve y estructurada en español, extrayendo los puntos clave.',
+  continue:
+    'Continúa escribiendo coherentemente a partir del siguiente fragmento, manteniendo el estilo, tono y registro clínico.',
+};
+
+/**
+ * Invoca el LLM local para una acción inline dentro del editor TipTap.
+ * @param text Texto seleccionado en el editor.
+ * @param action Tipo de acción: 'explain' | 'summarize' | 'continue'.
+ */
+export async function processEditorAction(
+  text: string,
+  action: 'explain' | 'summarize' | 'continue'
+): Promise<string> {
+  try {
+    const systemPrompt = EDITOR_ACTION_PROMPTS[action];
+    return await invoke<string>('process_text_local', {
+      text,
+      task: systemPrompt,
+    });
+  } catch (err) {
+    console.error('Error in editor inline action:', err);
+    throw new Error(
+      typeof err === 'string' ? err : 'Fallo en la acción de editor offline.'
+    );
+  }
+}

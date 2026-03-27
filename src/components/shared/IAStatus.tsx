@@ -1,71 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import {
-  getHardwareInfo,
-  checkModelStatus,
-  HardwareInfo,
-  ModelStatus,
-  downloadModel,
-} from '@/app/actions/ia';
-import {
+  AlertCircle,
+  CheckCircle2,
   Cpu,
   Database,
-  CheckCircle2,
-  AlertCircle,
   Download,
   Loader2,
 } from 'lucide-react';
-import { listen } from '@tauri-apps/api/event';
+import { useModels } from '@/hooks/useModels';
 
 const IAStatus = () => {
-  const [hwInfo, setHwInfo] = useState<HardwareInfo | null>(null);
-  const [modelStatus, setModelStatus] = useState<ModelStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [downloading, setDownloading] = useState<string | null>(null);
-  const [progress, setProgress] = useState<number>(0);
-
-  useEffect(() => {
-    init();
-
-    // Escuchar progreso desde Rust
-    const unlisten = listen<number>('download-progress', event => {
-      setProgress(event.payload);
-    });
-
-    return () => {
-      unlisten.then(f => f());
-    };
-  }, []);
-
-  const init = async () => {
-    setLoading(true);
-    const [hw, status] = await Promise.all([
-      getHardwareInfo(),
-      checkModelStatus(),
-    ]);
-    setHwInfo(hw);
-    setModelStatus(status);
-    setLoading(false);
-  };
-
-  const handleDownload = async (name: string) => {
-    setDownloading(name);
-    setProgress(0);
-    try {
-      const result = await downloadModel(name);
-      console.log(result);
-      // Una vez terminada la descarga, actualizamos el estado visual
-      const status = await checkModelStatus();
-      setModelStatus(status);
-      setDownloading(null);
-      setProgress(0);
-    } catch (err) {
-      alert(`Error en la descarga: ${err}`);
-      setDownloading(null);
-      setProgress(0);
-    }
-  };
+  const { hwInfo, modelStatus, loading, downloading, progress, startDownload } =
+    useModels();
 
   if (loading)
     return (
@@ -107,156 +54,34 @@ const IAStatus = () => {
 
       <div className="space-y-3 pt-1">
         {/* Whisper Status */}
-        <div className="flex items-center justify-between group">
-          <div className="flex items-center gap-2">
-            <div
-              className={`p-1 rounded ${modelStatus?.whisper_ready ? 'bg-green-50 dark:bg-green-900/20' : 'bg-zinc-100 dark:bg-zinc-800'}`}
-            >
-              <Database
-                size={12}
-                className={
-                  modelStatus?.whisper_ready
-                    ? 'text-green-600'
-                    : 'text-zinc-400'
-                }
-              />
-            </div>
-            <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
-              Whisper (Audio)
-            </span>
-          </div>
-          {modelStatus?.whisper_ready ? (
-            <div className="flex items-center gap-1.5 text-green-600 font-bold text-[10px]">
-              <span>Listo</span>
-              <CheckCircle2
-                size={14}
-                fill="currentColor"
-                className="text-white dark:text-zinc-900"
-              />
-            </div>
-          ) : downloading === 'whisper' ? (
-            <div className="flex flex-col items-end gap-1">
-              <div className="flex items-center gap-1.5 text-indigo-600 font-bold text-[10px]">
-                <Loader2 size={12} className="animate-spin" />
-                <span>{progress}%</span>
-              </div>
-              <div className="w-16 h-1 bg-zinc-200 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-indigo-500 transition-all duration-300"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => handleDownload('whisper')}
-              disabled={!!downloading}
-              className="text-[10px] bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded hover:bg-indigo-600 hover:text-white transition-colors flex items-center gap-1.5 font-bold border border-indigo-100"
-            >
-              <Download size={10} /> Instalar
-            </button>
-          )}
-        </div>
+        <ModelRow
+          label="Whisper (Audio)"
+          modelId="whisper"
+          ready={!!modelStatus?.whisper_ready}
+          downloading={downloading}
+          progress={progress}
+          onDownload={startDownload}
+        />
 
         {/* Llama-3 Status */}
-        <div className="flex items-center justify-between group">
-          <div className="flex items-center gap-2">
-            <div
-              className={`p-1 rounded ${modelStatus?.llama_ready ? 'bg-green-50 dark:bg-green-900/20' : 'bg-zinc-100 dark:bg-zinc-800'}`}
-            >
-              <Database
-                size={12}
-                className={
-                  modelStatus?.llama_ready ? 'text-green-600' : 'text-zinc-400'
-                }
-              />
-            </div>
-            <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
-              Llama-3 (Psicología)
-            </span>
-          </div>
-          {modelStatus?.llama_ready ? (
-            <div className="flex items-center gap-1.5 text-green-600 font-bold text-[10px]">
-              <span>Listo</span>
-              <CheckCircle2
-                size={14}
-                fill="currentColor"
-                className="text-white dark:text-zinc-900"
-              />
-            </div>
-          ) : downloading === 'llama-3-8b' ? (
-            <div className="flex flex-col items-end gap-1">
-              <div className="flex items-center gap-1.5 text-indigo-600 font-bold text-[10px]">
-                <Loader2 size={12} className="animate-spin" />
-                <span>{progress}%</span>
-              </div>
-              <div className="w-16 h-1 bg-zinc-200 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-indigo-500 transition-all duration-300"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => handleDownload('llama-3-8b')}
-              disabled={!!downloading}
-              className="text-[10px] bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded hover:bg-indigo-600 hover:text-white transition-colors flex items-center gap-1.5 font-bold border border-indigo-100"
-            >
-              <Download size={10} /> Instalar
-            </button>
-          )}
-        </div>
+        <ModelRow
+          label="Llama-3 (Psicología)"
+          modelId="llama-3-8b"
+          ready={!!modelStatus?.llama_ready}
+          downloading={downloading}
+          progress={progress}
+          onDownload={startDownload}
+        />
 
         {/* BioMedLM Status */}
-        <div className="flex items-center justify-between group">
-          <div className="flex items-center gap-2">
-            <div
-              className={`p-1 rounded ${modelStatus?.biomed_ready ? 'bg-green-50 dark:bg-green-900/20' : 'bg-zinc-100 dark:bg-zinc-800'}`}
-            >
-              <Database
-                size={12}
-                className={
-                  modelStatus?.biomed_ready ? 'text-green-600' : 'text-zinc-400'
-                }
-              />
-            </div>
-            <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
-              BioMedLM (Medicina)
-            </span>
-          </div>
-          {modelStatus?.biomed_ready ? (
-            <div className="flex items-center gap-1.5 text-green-600 font-bold text-[10px]">
-              <span>Listo</span>
-              <CheckCircle2
-                size={14}
-                fill="currentColor"
-                className="text-white dark:text-zinc-900"
-              />
-            </div>
-          ) : downloading === 'biomedlm-2.7b.gguf' ? (
-            <div className="flex flex-col items-end gap-1">
-              <div className="flex items-center gap-1.5 text-indigo-600 font-bold text-[10px]">
-                <Loader2 size={12} className="animate-spin" />
-                <span>{progress}%</span>
-              </div>
-              <div className="w-16 h-1 bg-zinc-200 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-indigo-500 transition-all duration-300"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => handleDownload('biomedlm-2.7b.gguf')}
-              disabled={!!downloading}
-              className="text-[10px] bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded hover:bg-indigo-600 hover:text-white transition-colors flex items-center gap-1.5 font-bold border border-indigo-100"
-            >
-              <Download size={10} /> Instalar
-            </button>
-          )}
-        </div>
+        <ModelRow
+          label="BioMedLM (Medicina)"
+          modelId="biomedlm-2.7b.gguf"
+          ready={!!modelStatus?.biomed_ready}
+          downloading={downloading}
+          progress={progress}
+          onDownload={startDownload}
+        />
       </div>
 
       {!modelStatus?.whisper_ready && !downloading && (
@@ -271,5 +96,70 @@ const IAStatus = () => {
     </div>
   );
 };
+
+interface ModelRowProps {
+  label: string;
+  modelId: string;
+  ready: boolean;
+  downloading: string | null;
+  progress: number;
+  onDownload: (id: string) => Promise<void>;
+}
+
+const ModelRow = ({
+  label,
+  modelId,
+  ready,
+  downloading,
+  progress,
+  onDownload,
+}: ModelRowProps) => (
+  <div className="flex items-center justify-between group">
+    <div className="flex items-center gap-2">
+      <div
+        className={`p-1 rounded ${ready ? 'bg-green-50 dark:bg-green-900/20' : 'bg-zinc-100 dark:bg-zinc-800'}`}
+      >
+        <Database
+          size={12}
+          className={ready ? 'text-green-600' : 'text-zinc-400'}
+        />
+      </div>
+      <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
+        {label}
+      </span>
+    </div>
+    {ready ? (
+      <div className="flex items-center gap-1.5 text-green-600 font-bold text-[10px]">
+        <span>Listo</span>
+        <CheckCircle2
+          size={14}
+          fill="currentColor"
+          className="text-white dark:text-zinc-900"
+        />
+      </div>
+    ) : downloading === modelId ? (
+      <div className="flex flex-col items-end gap-1">
+        <div className="flex items-center gap-1.5 text-indigo-600 font-bold text-[10px]">
+          <Loader2 size={12} className="animate-spin" />
+          <span>{progress}%</span>
+        </div>
+        <div className="w-16 h-1 bg-zinc-200 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-indigo-500 transition-all duration-300"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </div>
+    ) : (
+      <button
+        onClick={() => onDownload(modelId)}
+        disabled={!!downloading}
+        className="text-[10px] bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded hover:bg-indigo-600 hover:text-white transition-colors flex items-center gap-1.5 font-bold border border-indigo-100"
+      >
+        <Download size={10} /> Instalar
+      </button>
+    )}
+  </div>
+);
 
 export default IAStatus;
