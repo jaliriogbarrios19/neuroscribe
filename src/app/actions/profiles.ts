@@ -13,6 +13,10 @@ export interface Profile {
   activation_token: string | null;
 }
 
+interface ProfileUpdateInput {
+  [key: string]: unknown;
+}
+
 export async function getProfile(): Promise<Profile | null> {
   try {
     const profile = await invoke<Profile>('db_get_profile');
@@ -33,7 +37,7 @@ export async function activateLicense(key: string): Promise<boolean> {
   }
 }
 
-export async function updateProfile(data: any) {
+export async function updateProfile(data: ProfileUpdateInput) {
   // Nota: Dejamos esto mockeado por ahora ya que el perfil local es estático en el primer arranque
   console.log('[MOCK] updateProfile', data);
   return { id: 'local-user', ...data };

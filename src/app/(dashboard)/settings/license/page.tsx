@@ -48,11 +48,17 @@ export default function LicensePage() {
         const updated = await getProfile();
         setProfile(updated);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorText =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'string'
+            ? error
+            : null;
       setMessage({
         type: 'error',
         text:
-          error ||
+          errorText ||
           'Error al activar la licencia. Verifica la clave e intenta de nuevo.',
       });
     } finally {

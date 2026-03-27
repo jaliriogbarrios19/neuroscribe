@@ -1,7 +1,10 @@
 declare module 'citation-js' {
+  type CiteDataInput = unknown;
+  type CiteOptions = Record<string, unknown>;
+
   export class Cite {
-    constructor(data: any, options?: any);
-    format(format: string, options?: any): string;
-    data: any[];
+    constructor(data: CiteDataInput, options?: CiteOptions);
+    format(format: string, options?: CiteOptions): string;
+    data: unknown[];
   }
 }

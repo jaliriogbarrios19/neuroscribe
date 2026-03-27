@@ -7,6 +7,26 @@ import { verifyDOIWithCrossref } from '@/lib/utils/verify';
 const CONTACT_EMAIL = 'hola@neuroscribe.app'; // Email para Polite Pool de OpenAlex y Crossref
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY;
 
+interface OpenAlexWork {
+  doi?: string;
+  display_name?: string;
+  title?: string;
+  authorships?: { author?: { display_name?: string } }[];
+  publication_year?: number;
+  host_venue?: { display_name?: string };
+  relevance_score?: number;
+  open_access?: { oa_url?: string };
+}
+
+interface PubMedArticleId {
+  idtype?: string;
+  value?: string;
+}
+
+interface PubMedAuthor {
+  name?: string;
+}
+
 /**
  * Orquestador principal de búsqueda académica (PubMed + OpenAlex).
  * Implementa de-duplicación basada en DOI.
@@ -55,11 +75,11 @@ async function fetchOpenAlex(query: string): Promise<AcademicWork[]> {
 
     const data = await response.json();
 
-    return data.results.map((work: any) => ({
+    return data.results.map((work: OpenAlexWork) => ({
       doi: work.doi || '',
       title: work.display_name || work.title,
       authors:
-        work.authorships?.map((a: any) => ({ name: a.author.display_name })) ||
+        work.authorships?.map(a => ({ name: a.author?.display_name || '' })) ||
         [],
       year: work.publication_year,
       journal: work.host_venue?.display_name,
@@ -93,12 +113,15 @@ async function fetchPubMed(query: string): Promise<AcademicWork[]> {
     return ids.map((id: string) => {
       const item = summaryData.result[id];
       const doi =
-        item.articleids?.find((aid: any) => aid.idtype === 'doi')?.value || '';
+        item.articleids?.find((aid: PubMedArticleId) => aid.idtype === 'doi')
+          ?.value || '';
 
       return {
         doi: doi ? `https://doi.org/${doi}` : '',
         title: item.title,
-        authors: item.authors?.map((a: any) => ({ name: a.name })) || [],
+        authors:
+          item.authors?.map((a: PubMedAuthor) => ({ name: a.name || '' })) ||
+          [],
         year: parseInt(item.pubdate) || 0,
         journal: item.fulljournalname || item.source,
         abstract: '',

@@ -2,6 +2,11 @@ import { AcademicWork } from '@/types/research';
 
 const CONTACT_EMAIL = 'hola@neuroscribe.app'; // Email para Polite Pool de Crossref
 
+interface CrossrefAuthor {
+  given?: string;
+  family?: string;
+}
+
 /**
  * Valida un DOI directamente en la API de Crossref.
  * Actúa como nuestro "Detector de Alucinaciones".
@@ -57,8 +62,9 @@ export async function getMetadataFromCrossref(
       doi: work.DOI,
       title: work.title?.[0] || '',
       authors:
-        work.author?.map((a: any) => ({ name: `${a.given} ${a.family}` })) ||
-        [],
+        work.author?.map((a: CrossrefAuthor) => ({
+          name: [a.given, a.family].filter(Boolean).join(' '),
+        })) || [],
       year: work.published?.['date-parts']?.[0]?.[0] || 0,
       journal: work['container-title']?.[0] || '',
     };

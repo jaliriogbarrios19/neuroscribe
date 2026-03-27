@@ -104,8 +104,8 @@ export default function ModelsManagerPage() {
             Gestor de Modelos IA
           </h1>
           <p className="mt-2 text-zinc-500 dark:text-zinc-400">
-            Administra los "cerebros" locales de NeuroScribe para trabajar 100%
-            offline.
+            Administra los &quot;cerebros&quot; locales de NeuroScribe para
+            trabajar 100% offline.
           </p>
         </div>
         <button

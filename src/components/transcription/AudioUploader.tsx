@@ -16,7 +16,10 @@ import { transcribeAudioLocal } from '@/app/actions/ia';
 
 // Importar APIs de Tauri solo si estamos en el entorno de escritorio
 const getTauriAPIs = async () => {
-  if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+  if (
+    typeof window !== 'undefined' &&
+    '__TAURI_INTERNALS__' in (window as unknown as Record<string, unknown>)
+  ) {
     const { writeFile, BaseDirectory } = await import('@tauri-apps/plugin-fs');
     const { cacheDir, join } = await import('@tauri-apps/api/path');
     const { listen } = await import('@tauri-apps/api/event');
@@ -43,16 +46,19 @@ const AudioUploader = ({ onTranscriptionComplete }: AudioUploaderProps) => {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    let unlisten: any;
+    let unlisten: (() => void) | undefined;
 
     const setupListener = async () => {
       const apis = await getTauriAPIs();
       if (apis?.listen) {
-        unlisten = await apis.listen('transcription-progress', (event: any) => {
-          const p = (event.payload as { progress: number }).progress;
-          setProgress(p);
-          setStatus(`Transcribiendo... (${p}%)`);
-        });
+        unlisten = await apis.listen(
+          'transcription-progress',
+          (event: { payload: { progress: number } }) => {
+            const p = event.payload.progress;
+            setProgress(p);
+            setStatus(`Transcribiendo... (${p}%)`);
+          }
+        );
       }
     };
 
@@ -194,10 +200,10 @@ const AudioUploader = ({ onTranscriptionComplete }: AudioUploaderProps) => {
         setProgress(0);
         setStatus('');
       }, 1000);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error processing audio:', error);
       const errorMsg =
-        error.message ||
+        (error instanceof Error ? error.message : null) ||
         (typeof error === 'string'
           ? error
           : 'Error desconocido en la transcripciÃ³n.');
