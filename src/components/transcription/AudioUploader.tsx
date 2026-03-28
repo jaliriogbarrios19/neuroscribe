@@ -149,9 +149,8 @@ const AudioUploader = ({ onTranscriptionComplete }: AudioUploaderProps) => {
       unlisten = await apis.listen<string>('transcription-progress', event => {
         // El evento trae algo como "[00:01.000 -> 00:05.000]"
         // Podemos usar esto para dar una sensaciÃ³n de avance constante
-        setStatus(
-          `Procesando: ${event.payload.split(' -> ')[1].replace(/\]/g, '')}`
-        );
+        const [, endTime = event.payload] = event.payload.split(' -> ');
+        setStatus(`Procesando: ${endTime.replace(/\]/g, '')}`);
         setProgress(prev => Math.min(prev + 1, 95)); // Incrementar ligeramente el progreso
       });
     }
