@@ -16,7 +16,10 @@ import { transcribeAudioLocal } from '@/app/actions/ia';
 
 // Importar APIs de Tauri solo si estamos en el entorno de escritorio
 const getTauriAPIs = async () => {
-  if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+  if (
+    typeof window !== 'undefined' &&
+    Object.prototype.hasOwnProperty.call(window, '__TAURI_INTERNALS__')
+  ) {
     const { writeFile, BaseDirectory } = await import('@tauri-apps/plugin-fs');
     const { cacheDir, join } = await import('@tauri-apps/api/path');
     const { listen } = await import('@tauri-apps/api/event');
