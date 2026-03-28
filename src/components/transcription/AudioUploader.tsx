@@ -143,8 +143,10 @@ const AudioUploader = ({ onTranscriptionComplete }: AudioUploaderProps) => {
     let unlisten: (() => void) | null = null;
 
     async function setupListener() {
-      const { listen } = await import('@tauri-apps/api/event');
-      unlisten = await listen<string>('transcription-progress', event => {
+      const apis = await getTauriAPIs();
+      if (!apis?.listen) return;
+
+      unlisten = await apis.listen<string>('transcription-progress', event => {
         // El evento trae algo como "[00:01.000 -> 00:05.000]"
         // Podemos usar esto para dar una sensaciÃ³n de avance constante
         setStatus(
