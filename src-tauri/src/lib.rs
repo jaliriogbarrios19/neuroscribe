@@ -159,6 +159,27 @@ struct OpenAlexAuthor {
     display_name: String,
 }
 
+#[derive(Deserialize)]
+struct GladiaUploadResponse {
+    audio_url: String,
+}
+
+#[derive(Deserialize)]
+struct GladiaTranscriptionResponse {
+    result_url: Option<String>,
+    result: Option<GladiaTranscriptionResult>,
+}
+
+#[derive(Deserialize)]
+struct GladiaTranscriptionResult {
+    transcription: Option<GladiaTranscriptionData>,
+}
+
+#[derive(Deserialize)]
+struct GladiaTranscriptionData {
+    full_transcript: Option<String>,
+}
+
 #[derive(Clone, Serialize)]
 pub struct ProgressPayload {
     pub progress: i32,
@@ -425,78 +446,135 @@ async fn process_text_local(text: String, task: String, state: tauri::State<'_, 
 
 #[tauri::command(rename_all = "snake_case")]
 async fn transcribe_audio_local(audio_path: String, state: tauri::State<'_, SqlitePool>, handle: AppHandle) -> Result<String, String> {
-    println!("--- Iniciando TranscripciÃ³n Offline ---");
+    println!("--- Iniciando Transcripción con Gladia ---");
     
     // Timeout para la licencia para evitar bloqueos de DB
     println!("Verificando licencia...");
     tokio::time::timeout(std::time::Duration::from_secs(5), check_license_internal(state))
         .await
         .map_err(|_| "Timeout verificando licencia (la base de datos podrÃ­a estar bloqueada)".to_string())??;
-    
-    let app_dir = handle.path().app_data_dir().map_err(|e| e.to_string())?;
-    let model_path = app_dir.join("models").join("ggml-large-v3-turbo.bin");
-    
-    println!("Audio: {}", audio_path);
-    println!("Modelo: {}", model_path.display());
 
-    if !model_path.exists() {
-        return Err("Error: El archivo del modelo Whisper no existe en la carpeta de modelos.".to_string());
+    let gladia_api_key = std::env::var("GLADIA_API_KEY")
+        .map_err(|_| "GLADIA_API_KEY no está configurada. Añádela en tu entorno para habilitar la transcripción.".to_string())?;
+
+    let audio_bytes = tokio::fs::read(&audio_path)
+        .await
+        .map_err(|e| format!("No se pudo leer el archivo de audio: {}", e))?;
+
+    let file_name = std::path::Path::new(&audio_path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("audio.wav")
+        .to_string();
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .map_err(|e| format!("No se pudo crear cliente HTTP: {}", e))?;
+
+    let _ = handle.emit("transcription-progress", "Subiendo audio a Gladia (20%)");
+
+    let form = reqwest::multipart::Form::new().part(
+        "audio",
+        reqwest::multipart::Part::bytes(audio_bytes).file_name(file_name),
+    );
+
+    let upload_response = client
+        .post("https://api.gladia.io/v2/upload")
+        .header("x-gladia-key", &gladia_api_key)
+        .multipart(form)
+        .send()
+        .await
+        .map_err(|e| format!("Error subiendo audio a Gladia: {}", e))?;
+
+    if !upload_response.status().is_success() {
+        let status = upload_response.status();
+        let body = upload_response.text().await.unwrap_or_default();
+        return Err(format!("Gladia upload falló ({}): {}", status, body));
     }
 
-    let hw = get_hardware_info();
-    let thread_count = (hw.cpu_cores as i32 - 1).max(1); // Usar casi todos los hilos disponibles para mÃ¡xima velocidad
-    println!("Usando {} hilos para la transcripciÃ³n...", thread_count);
+    let upload_data: GladiaUploadResponse = upload_response
+        .json()
+        .await
+        .map_err(|e| format!("Respuesta inválida de upload en Gladia: {}", e))?;
 
-    let shell = handle.shell();
-    let sidecar = shell.sidecar("whisper-cli").map_err(|e| format!("No se pudo encontrar el sidecar: {}", e))?;
-    
-    let (mut rx, _child) = sidecar
-        .args([
-            "-m", &model_path.to_string_lossy(),
-            "-f", &audio_path,
-            "-oj", 
-            "-of", &format!("{}_out", audio_path),
-            "-l", "auto",
-            "--threads", &thread_count.to_string(),
-            "--no-prints",
-            "--print-progress" // Bandera para que reporte progreso en stderr
-        ])
-        .spawn()
-        .map_err(|e| format!("Error al iniciar el proceso Whisper: {}", e))?;
+    let _ = handle.emit("transcription-progress", "Solicitando transcripción a Gladia (50%)");
 
-    println!("Proceso Whisper lanzado con {} hilos. Esperando respuesta...", thread_count);
-    let mut stderr_log = String::new();
+    let transcription_response = client
+        .post("https://api.gladia.io/v2/pre-recorded")
+        .header("x-gladia-key", &gladia_api_key)
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({
+            "audio_url": upload_data.audio_url,
+            "language_config": {
+                "languages": ["es"],
+                "code_switching": true
+            }
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Error solicitando transcripción a Gladia: {}", e))?;
 
-    while let Some(event) = rx.recv().await {
-        match event {
-            CommandEvent::Stderr(line) => {
-                let err_line = String::from_utf8_lossy(&line);
-                // Si Whisper reporta progreso (ej. [00:01.000 -> 00:05.000]), enviarlo al frontend
-                if err_line.contains(" -> ") {
-                    let _ = handle.emit("transcription-progress", err_line.clone());
+    if !transcription_response.status().is_success() {
+        let status = transcription_response.status();
+        let body = transcription_response.text().await.unwrap_or_default();
+        return Err(format!(
+            "Gladia pre-recorded falló ({}): {}",
+            status,
+            body
+        ));
+    }
+
+    let mut transcription_data: GladiaTranscriptionResponse = transcription_response
+        .json()
+        .await
+        .map_err(|e| format!("Respuesta inválida de pre-recorded en Gladia: {}", e))?;
+
+    let _ = handle.emit("transcription-progress", "Procesando resultado de Gladia (80%)");
+
+    if transcription_data.result.is_none() {
+        if let Some(result_url) = transcription_data.result_url.clone() {
+            let mut ready = false;
+            for _ in 0..30 {
+                let poll_response = client
+                    .get(&result_url)
+                    .header("x-gladia-key", &gladia_api_key)
+                    .send()
+                    .await
+                    .map_err(|e| format!("Error consultando resultado de Gladia: {}", e))?;
+
+                if poll_response.status().is_success() {
+                    let polled: GladiaTranscriptionResponse = poll_response
+                        .json()
+                        .await
+                        .map_err(|e| format!("Respuesta inválida al consultar resultado de Gladia: {}", e))?;
+                    if polled.result.is_some() {
+                        transcription_data = polled;
+                        ready = true;
+                        break;
+                    }
                 }
-                stderr_log.push_str(&err_line);
+
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
             }
-            CommandEvent::Terminated(payload) => {
-                println!("Whisper terminado con cÃ³digo: {:?}", payload.code);
-                break;
+
+            if !ready {
+                return Err("Gladia aún no devolvió el resultado de transcripción. Intenta nuevamente en unos segundos.".to_string());
             }
-            _ => {}
         }
     }
 
-    let json_path = format!("{}_out.json", audio_path);
-    println!("Buscando resultado en: {}", json_path);
+    let full_transcript = transcription_data
+        .result
+        .and_then(|r| r.transcription)
+        .and_then(|t| t.full_transcript)
+        .map(|text| text.trim().to_string())
+        .filter(|text| !text.is_empty())
+        .ok_or_else(|| "Gladia no devolvió texto transcrito.".to_string())?;
 
-    if let Ok(json_content) = fs::read_to_string(&json_path) {
-        let data: WhisperOutput = serde_json::from_str(&json_content)
-            .map_err(|e| format!("Error en JSON de Whisper: {}. Stderr: {}", e, stderr_log))?;
-        let _ = fs::remove_file(&json_path);
-        println!("Â¡TranscripciÃ³n completada con Ã©xito!");
-        Ok(data.text)
-    } else {
-        Err(format!("Whisper no generÃ³ el archivo JSON. Stderr: {}", stderr_log))
-    }
+    let _ = handle.emit("transcription-progress", "Transcripción completada (100%)");
+
+    Ok(full_transcript)
 }
 
 #[tauri::command]

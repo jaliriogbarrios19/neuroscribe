@@ -53,10 +53,20 @@ const AudioUploader = ({ onTranscriptionComplete }: AudioUploaderProps) => {
       if (apis?.listen) {
         unlisten = await apis.listen(
           'transcription-progress',
-          (event: { payload: { progress: number } }) => {
-            const p = event.payload.progress;
-            setProgress(p);
-            setStatus(`Transcribiendo... (${p}%)`);
+          (event: { payload: string }) => {
+            const message = event.payload;
+            const progressMatch = message.match(/\d+/);
+            const parsedProgress = progressMatch
+              ? Number.parseInt(progressMatch[0], 10)
+              : Number.NaN;
+
+            if (Number.isFinite(parsedProgress)) {
+              setProgress(parsedProgress);
+              setStatus(`Transcribiendo... (${parsedProgress}%)`);
+              return;
+            }
+
+            setStatus(message);
           }
         );
       }
@@ -181,7 +191,7 @@ const AudioUploader = ({ onTranscriptionComplete }: AudioUploaderProps) => {
       await writeFile(tempPath, uint8Array);
       setProgress(30);
 
-      setStatus('Transcribiendo offline con Whisper-v3...');
+      setStatus('Transcribiendo con Gladia...');
       const text = await transcribeAudioLocal(tempPath);
 
       setProgress(90);
@@ -362,7 +372,7 @@ const AudioUploader = ({ onTranscriptionComplete }: AudioUploaderProps) => {
                 <Loader2 size={18} className="animate-spin" /> Transcribiendo...
               </>
             ) : (
-              'Iniciar Transcripción Local'
+              'Iniciar Transcripción'
             )}
           </button>
         </div>

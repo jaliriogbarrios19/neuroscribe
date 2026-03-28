@@ -51,7 +51,7 @@ export async function downloadModel(modelName: string): Promise<string> {
 }
 
 /**
- * Invoca el orquestador de transcripciÃ³n local.
+ * Invoca el orquestador de transcripción (Gladia).
  * @param audio_path Ruta absoluta del archivo en disco.
  */
 export async function transcribeAudioLocal(
@@ -60,9 +60,9 @@ export async function transcribeAudioLocal(
   try {
     return await invoke<string>('transcribe_audio_local', { audio_path });
   } catch (err) {
-    console.error('Error in local transcription:', err);
+    console.error('Error in transcription:', err);
     throw new Error(
-      typeof err === 'string' ? err : 'Fallo en la transcripciÃ³n offline.'
+      typeof err === 'string' ? err : 'Fallo en la transcripción con Gladia.'
     );
   }
 }
