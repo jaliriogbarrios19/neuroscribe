@@ -9,6 +9,12 @@ use std::fs;
 use std::str::FromStr;
 use futures_util::StreamExt;
 use tokio::io::AsyncWriteExt;
+use aes_gcm::{
+    Aes256Gcm,
+    aead::{Aead, AeadCore, KeyInit, OsRng},
+};
+use base64::{Engine as _, engine::general_purpose};
+use sha2::{Digest, Sha256};
 
 // --- Structs de Datos ---
 
@@ -197,6 +203,64 @@ pub struct ResearchArticle {
     pub doi: String,
 }
 
+const GLADIA_KEY_PREFIX: &str = "enc:v1:";
+
+fn encryption_key_material() -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(get_hardware_id().as_bytes());
+    hasher.update(b"|neuroscribe-gladia-v1|");
+    let digest = hasher.finalize();
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&digest);
+    key
+}
+
+fn encrypt_gladia_api_key(plain_text: &str) -> Result<String, String> {
+    let key = encryption_key_material();
+    let cipher = Aes256Gcm::new_from_slice(&key)
+        .map_err(|_| "No se pudo inicializar el cifrado local.".to_string())?;
+    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+    let encrypted = cipher
+        .encrypt(&nonce, plain_text.as_bytes())
+        .map_err(|_| "No se pudo cifrar la clave de Gladia.".to_string())?;
+
+    let nonce_b64 = general_purpose::STANDARD_NO_PAD.encode(nonce.as_slice());
+    let encrypted_b64 = general_purpose::STANDARD_NO_PAD.encode(encrypted);
+
+    Ok(format!("{}{}.{}", GLADIA_KEY_PREFIX, nonce_b64, encrypted_b64))
+}
+
+fn decrypt_gladia_api_key(stored_value: &str) -> Result<String, String> {
+    if !stored_value.starts_with(GLADIA_KEY_PREFIX) {
+        return Ok(stored_value.to_string());
+    }
+
+    let payload = &stored_value[GLADIA_KEY_PREFIX.len()..];
+    let (nonce_b64, encrypted_b64) = payload
+        .split_once('.')
+        .ok_or_else(|| "Formato cifrado inválido.".to_string())?;
+
+    let nonce_bytes = general_purpose::STANDARD_NO_PAD
+        .decode(nonce_b64)
+        .map_err(|_| "Nonce inválido.".to_string())?;
+    if nonce_bytes.len() != 12 {
+        return Err("Longitud de nonce inválida.".to_string());
+    }
+    let encrypted = general_purpose::STANDARD_NO_PAD
+        .decode(encrypted_b64)
+        .map_err(|_| "Payload cifrado inválido.".to_string())?;
+
+    let key = encryption_key_material();
+    let cipher = Aes256Gcm::new_from_slice(&key)
+        .map_err(|_| "No se pudo inicializar el descifrado local.".to_string())?;
+    let nonce = aes_gcm::Nonce::from_slice(&nonce_bytes);
+    let decrypted = cipher
+        .decrypt(nonce, encrypted.as_ref())
+        .map_err(|_| "No se pudo descifrar la clave de Gladia.".to_string())?;
+
+    String::from_utf8(decrypted).map_err(|_| "Texto descifrado inválido.".to_string())
+}
+
 // --- Comandos de Licencia ---
 
 #[tauri::command]
@@ -356,8 +420,10 @@ async fn db_set_gladia_api_key(gladia_api_key: String, state: tauri::State<'_, S
         return Err("La clave de Gladia no puede estar vacía.".to_string());
     }
 
+    let encrypted_key = encrypt_gladia_api_key(trimmed)?;
+
     sqlx::query("UPDATE profiles SET gladia_api_key = ? WHERE id = 'local-user'")
-        .bind(trimmed)
+        .bind(encrypted_key)
         .execute(&*state)
         .await
         .map_err(|e| e.to_string())?;
@@ -479,6 +545,9 @@ async fn transcribe_audio_local(audio_path: String, state: tauri::State<'_, Sqli
         .await
         .map_err(|e| format!("No se pudo leer la configuración de Gladia: {}", e))?
         .flatten()
+        .map(|value| decrypt_gladia_api_key(value.trim()))
+        .transpose()
+        .map_err(|e| format!("No se pudo procesar la clave de Gladia guardada: {}", e))?
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
 
