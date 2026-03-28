@@ -15,7 +15,15 @@ export interface Profile {
 }
 
 interface ProfileUpdateInput {
-  [key: string]: unknown;
+  email?: string | null;
+  full_name?: string | null;
+  minutes_balance?: number;
+  cc_balance?: number;
+  license_key?: string | null;
+  gladia_api_key?: string | null;
+  trial_start_date?: string;
+  is_activated?: boolean;
+  activation_token?: string | null;
 }
 
 export async function getProfile(): Promise<Profile | null> {
