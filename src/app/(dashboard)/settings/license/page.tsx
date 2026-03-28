@@ -1,7 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getProfile, activateLicense, Profile } from '@/app/actions/profiles';
+import {
+  getProfile,
+  activateLicense,
+  setGladiaApiKey,
+  Profile,
+} from '@/app/actions/profiles';
 import {
   ShieldCheck,
   ShieldAlert,
@@ -17,6 +22,8 @@ export default function LicensePage() {
   const [loading, setLoading] = useState(true);
   const [activating, setActivating] = useState(false);
   const [key, setKey] = useState('');
+  const [gladiaKey, setGladiaKey] = useState('');
+  const [savingGladiaKey, setSavingGladiaKey] = useState(false);
   const [message, setMessage] = useState<{
     type: 'success' | 'error';
     text: string;
@@ -26,6 +33,7 @@ export default function LicensePage() {
     async function load() {
       const p = await getProfile();
       setProfile(p);
+      setGladiaKey(p?.gladia_api_key || '');
       setLoading(false);
     }
     load();
@@ -63,6 +71,38 @@ export default function LicensePage() {
       });
     } finally {
       setActivating(false);
+    }
+  };
+
+  const handleSaveGladiaKey = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!gladiaKey.trim()) return;
+
+    setSavingGladiaKey(true);
+    setMessage(null);
+
+    try {
+      await setGladiaApiKey(gladiaKey.trim());
+      setMessage({
+        type: 'success',
+        text: 'Clave de Gladia guardada correctamente.',
+      });
+      const updated = await getProfile();
+      setProfile(updated);
+      setGladiaKey(updated?.gladia_api_key || gladiaKey.trim());
+    } catch (error: unknown) {
+      const errorText =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'string'
+            ? error
+            : null;
+      setMessage({
+        type: 'error',
+        text: errorText || 'No se pudo guardar la clave de Gladia.',
+      });
+    } finally {
+      setSavingGladiaKey(false);
     }
   };
 
@@ -237,6 +277,46 @@ export default function LicensePage() {
           </div>
         </div>
       )}
+
+      <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-8 shadow-sm">
+        <h3 className="text-xl font-bold text-zinc-900 dark:text-white mb-2">
+          Clave de Gladia
+        </h3>
+        <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-6">
+          Necesaria para transcripción en la nube cuando no se usa modelo local.
+        </p>
+        <form onSubmit={handleSaveGladiaKey} className="space-y-4">
+          <div>
+            <label
+              htmlFor="gladia-key"
+              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2"
+            >
+              API Key de Gladia
+            </label>
+            <input
+              id="gladia-key"
+              type="password"
+              value={gladiaKey}
+              onChange={e => setGladiaKey(e.target.value)}
+              placeholder="gsk_..."
+              className="w-full px-4 py-3 rounded-xl border border-zinc-200 bg-zinc-50 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all dark:bg-zinc-800 dark:border-zinc-700 dark:text-white"
+              required
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={savingGladiaKey || !gladiaKey.trim()}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-indigo-200 dark:shadow-none transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {savingGladiaKey ? (
+              <Loader2 className="animate-spin" size={18} />
+            ) : (
+              <Key size={18} />
+            )}
+            {savingGladiaKey ? 'Guardando...' : 'Guardar Clave de Gladia'}
+          </button>
+        </form>
+      </div>
 
       {/* Hardware Info Section (for support) */}
       <div className="bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl p-6 text-center">

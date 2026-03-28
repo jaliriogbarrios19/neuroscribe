@@ -22,6 +22,8 @@ pub struct Profile {
     pub created_at: String,
     pub license_key: Option<String>,
     #[sqlx(default)]
+    pub gladia_api_key: Option<String>,
+    #[sqlx(default)]
     pub trial_start_date: Option<String>,
     #[sqlx(default)]
     pub is_activated: bool,
@@ -348,6 +350,22 @@ async fn db_get_profile(state: tauri::State<'_, SqlitePool>) -> Result<Profile, 
 }
 
 #[tauri::command]
+async fn db_set_gladia_api_key(gladia_api_key: String, state: tauri::State<'_, SqlitePool>) -> Result<bool, String> {
+    let trimmed = gladia_api_key.trim();
+    if trimmed.is_empty() {
+        return Err("La clave de Gladia no puede estar vacía.".to_string());
+    }
+
+    sqlx::query("UPDATE profiles SET gladia_api_key = ? WHERE id = 'local-user'")
+        .bind(trimmed)
+        .execute(&*state)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(true)
+}
+
+#[tauri::command]
 async fn db_get_folders(state: tauri::State<'_, SqlitePool>) -> Result<Vec<Folder>, String> {
     sqlx::query_as::<_, Folder>("SELECT f.*, COUNT(d.id) as count FROM folders f LEFT JOIN documents d ON f.id = d.folder_id GROUP BY f.id ORDER BY f.created_at DESC")
     .fetch_all(&*state).await.map_err(|e| e.to_string())
@@ -454,8 +472,22 @@ async fn transcribe_audio_local(audio_path: String, state: tauri::State<'_, Sqli
         .await
         .map_err(|_| "Timeout verificando licencia (la base de datos podrÃ­a estar bloqueada)".to_string())??;
 
-    let gladia_api_key = std::env::var("GLADIA_API_KEY")
-        .map_err(|_| "GLADIA_API_KEY no está configurada. Añádela en tu entorno para habilitar la transcripción.".to_string())?;
+    let profile_key = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT gladia_api_key FROM profiles WHERE id = 'local-user' LIMIT 1"
+    )
+        .fetch_optional(&*state)
+        .await
+        .map_err(|e| format!("No se pudo leer la configuración de Gladia: {}", e))?
+        .flatten()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+
+    let gladia_api_key = profile_key
+        .or_else(|| std::env::var("GLADIA_API_KEY").ok())
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            "No hay clave de Gladia configurada. Añádela en Ajustes > Licencia o define GLADIA_API_KEY.".to_string()
+        })?;
 
     let audio_bytes = tokio::fs::read(&audio_path)
         .await
@@ -725,6 +757,7 @@ pub fn run() {
           println!("Reparando/Verificando columnas de licencia (MigraciÃ³n 02)...");
           // Ejecutamos cada alter table por separado para evitar que uno falle y detenga a los demÃ¡s
           let _ = sqlx::query("ALTER TABLE profiles ADD COLUMN license_key TEXT").execute(&pool).await;
+          let _ = sqlx::query("ALTER TABLE profiles ADD COLUMN gladia_api_key TEXT").execute(&pool).await;
           let _ = sqlx::query("ALTER TABLE profiles ADD COLUMN trial_start_date DATETIME DEFAULT CURRENT_TIMESTAMP").execute(&pool).await;
           let _ = sqlx::query("ALTER TABLE profiles ADD COLUMN is_activated BOOLEAN DEFAULT 0").execute(&pool).await;
           let _ = sqlx::query("ALTER TABLE profiles ADD COLUMN activation_token TEXT").execute(&pool).await;
@@ -737,6 +770,6 @@ pub fn run() {
       });
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![greet, db_get_profile, db_get_folders, db_create_folder, db_get_documents, db_save_document, db_delete_document, get_hardware_info, get_hardware_id, check_models, download_model, transcribe_audio_local, process_text_local, generate_research_paper_local, generate_quick_answer_local, activate_license, get_academic_data_local, verify_doi_local, check_mirror_health, db_delete_model])
+    .invoke_handler(tauri::generate_handler![greet, db_get_profile, db_set_gladia_api_key, db_get_folders, db_create_folder, db_get_documents, db_save_document, db_delete_document, get_hardware_info, get_hardware_id, check_models, download_model, transcribe_audio_local, process_text_local, generate_research_paper_local, generate_quick_answer_local, activate_license, get_academic_data_local, verify_doi_local, check_mirror_health, db_delete_model])
     .run(tauri::generate_context!()).expect("run");
 }

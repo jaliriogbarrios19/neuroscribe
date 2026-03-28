@@ -8,6 +8,7 @@ export interface Profile {
   cc_balance: number;
   created_at: string;
   license_key: string | null;
+  gladia_api_key: string | null;
   trial_start_date: string;
   is_activated: boolean;
   activation_token: string | null;
@@ -33,6 +34,18 @@ export async function activateLicense(key: string): Promise<boolean> {
     return success;
   } catch (error) {
     console.error('Error activating license:', error);
+    throw error;
+  }
+}
+
+export async function setGladiaApiKey(gladiaApiKey: string): Promise<boolean> {
+  try {
+    const success = await invoke<boolean>('db_set_gladia_api_key', {
+      gladiaApiKey,
+    });
+    return success;
+  } catch (error) {
+    console.error('Error saving Gladia API key:', error);
     throw error;
   }
 }

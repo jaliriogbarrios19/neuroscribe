@@ -7,6 +7,7 @@
         "allow": [
           "greet",
           "db_get_profile",
+          "db_set_gladia_api_key",
           "db_get_folders",
           "db_create_folder",
           "db_get_documents",
