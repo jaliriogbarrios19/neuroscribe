@@ -14,6 +14,7 @@ use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit, OsRng},
 };
 use base64::{Engine as _, engine::general_purpose};
+use pbkdf2::pbkdf2_hmac;
 use sha2::{Digest, Sha256};
 
 // --- Structs de Datos ---
@@ -204,14 +205,21 @@ pub struct ResearchArticle {
 }
 
 const GLADIA_KEY_PREFIX: &str = "enc:v1:";
+const GLADIA_KDF_ITERATIONS: u32 = 120_000;
+const GLADIA_KDF_SALT: &[u8] = b"neuroscribe-gladia-v1";
+const GLADIA_NONCE_SIZE: usize = 12;
+// 30 * 2s = 60s máximo de espera por resultado asincrónico de Gladia.
+const GLADIA_POLL_MAX_ATTEMPTS: usize = 30;
+const GLADIA_POLL_INTERVAL_SECS: u64 = 2;
 
 fn encryption_key_material() -> [u8; 32] {
-    let mut hasher = Sha256::new();
-    hasher.update(get_hardware_id().as_bytes());
-    hasher.update(b"|neuroscribe-gladia-v1|");
-    let digest = hasher.finalize();
     let mut key = [0u8; 32];
-    key.copy_from_slice(&digest);
+    pbkdf2_hmac::<Sha256>(
+        get_hardware_id().as_bytes(),
+        GLADIA_KDF_SALT,
+        GLADIA_KDF_ITERATIONS,
+        &mut key,
+    );
     key
 }
 
@@ -231,10 +239,6 @@ fn encrypt_gladia_api_key(plain_text: &str) -> Result<String, String> {
 }
 
 fn decrypt_gladia_api_key(stored_value: &str) -> Result<String, String> {
-    if !stored_value.starts_with(GLADIA_KEY_PREFIX) {
-        return Ok(stored_value.to_string());
-    }
-
     let payload = &stored_value[GLADIA_KEY_PREFIX.len()..];
     let (nonce_b64, encrypted_b64) = payload
         .split_once('.')
@@ -243,7 +247,7 @@ fn decrypt_gladia_api_key(stored_value: &str) -> Result<String, String> {
     let nonce_bytes = general_purpose::STANDARD_NO_PAD
         .decode(nonce_b64)
         .map_err(|_| "Nonce inválido.".to_string())?;
-    if nonce_bytes.len() != 12 {
+    if nonce_bytes.len() != GLADIA_NONCE_SIZE {
         return Err("Longitud de nonce inválida.".to_string());
     }
     let encrypted = general_purpose::STANDARD_NO_PAD
@@ -545,18 +549,50 @@ async fn transcribe_audio_local(audio_path: String, state: tauri::State<'_, Sqli
         .await
         .map_err(|e| format!("No se pudo leer la configuración de Gladia: {}", e))?
         .flatten()
-        .map(|value| decrypt_gladia_api_key(value.trim()))
-        .transpose()
-        .map_err(|e| format!("No se pudo procesar la clave de Gladia guardada: {}", e))?
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
 
-    let gladia_api_key = profile_key
-        .or_else(|| std::env::var("GLADIA_API_KEY").ok())
+    if let Some(raw_profile_key) = profile_key {
+        let resolved_profile_key = if raw_profile_key.starts_with(GLADIA_KEY_PREFIX) {
+            decrypt_gladia_api_key(&raw_profile_key)
+                .map_err(|e| format!("No se pudo procesar la clave de Gladia guardada: {}", e))?
+        } else {
+            println!("Migrando clave de Gladia en texto plano a formato cifrado local...");
+            let encrypted = encrypt_gladia_api_key(&raw_profile_key)?;
+            sqlx::query("UPDATE profiles SET gladia_api_key = ? WHERE id = 'local-user'")
+                .bind(encrypted)
+                .execute(&*state)
+                .await
+                .map_err(|e| format!("No se pudo migrar la clave de Gladia existente: {}", e))?;
+            raw_profile_key
+        };
+
+        return continue_transcribe_with_gladia(audio_path, state, handle, resolved_profile_key).await;
+    }
+
+    let gladia_api_key = std::env::var("GLADIA_API_KEY")
+        .ok()
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| {
             "No hay clave de Gladia configurada. Añádela en Ajustes > Licencia o define GLADIA_API_KEY.".to_string()
         })?;
+
+    continue_transcribe_with_gladia(audio_path, state, handle, gladia_api_key).await
+}
+
+async fn continue_transcribe_with_gladia(
+    audio_path: String,
+    _state: tauri::State<'_, SqlitePool>,
+    handle: AppHandle,
+    gladia_api_key: String,
+) -> Result<String, String> {
+    let gladia_api_key = gladia_api_key
+        .trim()
+        .to_string();
+
+    if gladia_api_key.is_empty() {
+        return Err("No hay clave de Gladia configurada. Añádela en Ajustes > Licencia o define GLADIA_API_KEY.".to_string());
+    }
 
     let audio_bytes = tokio::fs::read(&audio_path)
         .await
@@ -636,7 +672,7 @@ async fn transcribe_audio_local(audio_path: String, state: tauri::State<'_, Sqli
     if transcription_data.result.is_none() {
         if let Some(result_url) = transcription_data.result_url.clone() {
             let mut ready = false;
-            for _ in 0..30 {
+            for _ in 0..GLADIA_POLL_MAX_ATTEMPTS {
                 let poll_response = client
                     .get(&result_url)
                     .header("x-gladia-key", &gladia_api_key)
@@ -656,7 +692,7 @@ async fn transcribe_audio_local(audio_path: String, state: tauri::State<'_, Sqli
                     }
                 }
 
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                tokio::time::sleep(std::time::Duration::from_secs(GLADIA_POLL_INTERVAL_SECS)).await;
             }
 
             if !ready {

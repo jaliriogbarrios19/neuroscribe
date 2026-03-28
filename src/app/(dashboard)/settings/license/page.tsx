@@ -296,6 +296,7 @@ export default function LicensePage() {
             <input
               id="gladia-key"
               type="password"
+              autoComplete="new-password"
               value={gladiaKey}
               onChange={e => setGladiaKey(e.target.value)}
               placeholder="gsk_..."
