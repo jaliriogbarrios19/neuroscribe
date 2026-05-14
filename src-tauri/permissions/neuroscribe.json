@@ -21,7 +21,19 @@
           "generate_quick_answer_local",
           "activate_license",
           "get_academic_data_local",
-          "verify_doi_local"
+          "verify_doi_local",
+          "check_mirror_health",
+          "db_delete_model",
+          "save_api_key",
+          "get_api_keys",
+          "delete_api_key",
+          "transcribe_gladia",
+          "transcribe_deepgram",
+          "transcribe_assemblyai",
+          "transcribe_with_provider",
+          "transcribe_with_provider_offline",
+          "update_speaker_label",
+          "llm_generate"
         ]
       }
     }
