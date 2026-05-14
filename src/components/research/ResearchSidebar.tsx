@@ -1,9 +1,11 @@
 'use client'
 
-import { useState } from "react";
-import { Search, Loader2, BookOpen, ExternalLink, Sparkles, X, FileText, Zap, ShieldCheck, Tag } from "lucide-react";
-import { getAcademicData, generateScienceSynthesis, generateQuickAnswer } from "@/app/actions/research";
+import { useState, useEffect } from "react";
+import { Search, Loader2, BookOpen, ExternalLink, Sparkles, X, FileText, Zap, ShieldCheck, Tag, Brain, Cpu } from "lucide-react";
+import { getAcademicData, generateScienceSynthesis, generateQuickAnswer, generateWithCloudLLM } from "@/app/actions/research";
+import { getApiKeys } from "@/app/actions/ia";
 import { AcademicWork } from "@/types/research";
+import { LLM_PROVIDERS, type ApiKeyEntry } from "@/types/apiKeys";
 import { cn } from "@/lib/utils/cn";
 
 interface ResearchSidebarProps {
@@ -21,6 +23,22 @@ const ResearchSidebar = ({ isOpen, onClose, onInsertResult }: ResearchSidebarPro
 
   const [domain, setDomain] = useState<"medicine" | "psychology">("psychology");
   const [researchMode, setResearchMode] = useState<"quick" | "full">("quick");
+  const [llmProvider, setLlmProvider] = useState<string>("offline");
+  const [configuredProviders, setConfiguredProviders] = useState<ApiKeyEntry[]>([]);
+
+  useEffect(() => {
+    loadProviders();
+  }, []);
+
+  const loadProviders = async () => {
+    try {
+      const keys = await getApiKeys();
+      const llmKeys = keys.filter(k => LLM_PROVIDERS.some(p => p.key === k.provider));
+      setConfiguredProviders(llmKeys);
+    } catch {
+      // Silent
+    }
+  };
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,7 +60,10 @@ const ResearchSidebar = ({ isOpen, onClose, onInsertResult }: ResearchSidebarPro
 
     setSynthesizing(true);
     try {
-      if (researchMode === "quick") {
+      if (llmProvider !== "offline") {
+        const response = await generateWithCloudLLM(llmProvider, query, results, domain, researchMode);
+        onInsertResult(response.synthesis);
+      } else if (researchMode === "quick") {
         const response = await generateQuickAnswer(query, results, domain);
         onInsertResult(response.synthesis);
       } else {
@@ -104,6 +125,23 @@ const ResearchSidebar = ({ isOpen, onClose, onInsertResult }: ResearchSidebarPro
                 highPrecision ? "translate-x-5" : "translate-x-1"
               )} />
             </button>
+          </div>
+
+          {/* LLM Provider Selector */}
+          <div className="mt-4 flex items-center gap-2">
+            <Brain size={14} className="text-zinc-400" />
+            <select
+              value={llmProvider}
+              onChange={(e) => setLlmProvider(e.target.value)}
+              className="flex-1 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-[10px] font-medium focus:border-indigo-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+            >
+              <option value="offline">Local (Offline)</option>
+              {configuredProviders.map((p) => (
+                <option key={p.provider} value={p.provider}>
+                  {LLM_PROVIDERS.find(l => l.key === p.provider)?.label || p.provider}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Domain Selector */}

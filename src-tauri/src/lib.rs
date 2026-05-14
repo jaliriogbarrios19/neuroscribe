@@ -10,7 +10,47 @@ use std::str::FromStr;
 use futures_util::StreamExt;
 use tokio::io::AsyncWriteExt;
 
+mod crypto;
+
 // --- Structs de Datos ---
+
+#[derive(Serialize, Deserialize, sqlx::FromRow)]
+pub struct ApiKeyEntry {
+    pub provider: String,
+    pub masked_key: String,
+    pub created_at: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct TranscriptionResult {
+    pub full_text: String,
+    pub segments: Vec<TranscriptionSegment>,
+    pub speakers: Vec<SpeakerInfo>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct TranscriptionSegment {
+    pub speaker_id: String,
+    pub speaker_label: String,
+    pub text: String,
+    pub start_ms: i64,
+    pub end_ms: i64,
+    pub confidence: f64,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct SpeakerInfo {
+    pub id: String,
+    pub label: String,
+    pub color: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct LlmGenerateRequest {
+    pub provider: String,
+    pub prompt: String,
+    pub model: Option<String>,
+}
 
 #[derive(Serialize, Deserialize, sqlx::FromRow)]
 pub struct Profile {
@@ -202,50 +242,97 @@ async fn activate_license(key: String, state: tauri::State<'_, SqlitePool>) -> R
     Ok(true)
 }
 
-async fn check_license_internal(state: tauri::State<'_, SqlitePool>) -> Result<(), String> {
-    let profile = sqlx::query_as::<_, Profile>("SELECT * FROM profiles LIMIT 1")
-        .fetch_one(&*state)
-        .await
-        .map_err(|e| format!("Error accediendo al perfil: {}", e))?;
+// --- Comandos de API Keys ---
 
-    if profile.is_activated { return Ok(()); }
-
-    // Si la fecha no existe, usamos la fecha de creaciÃ³n o el momento actual
-    let raw_date = profile.trial_start_date.clone().unwrap_or_else(|| profile.created_at.clone());
-
-    let start_date = chrono::NaiveDateTime::parse_from_str(&raw_date, "%Y-%m-%d %H:%M:%S")
-        .map(|ndt| chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(ndt, chrono::Utc))
-        .or_else(|_| chrono::DateTime::parse_from_rfc3339(&raw_date).map(|dt| dt.with_timezone(&chrono::Utc)))
-        .or_else(|_| chrono::DateTime::parse_from_str(&format!("{}+00:00", raw_date.replace(" ", "T")), "%Y-%m-%dT%H:%M:%S%z").map(|dt| dt.with_timezone(&chrono::Utc)))
-        .unwrap_or_else(|_| chrono::Utc::now());
-    
-    let days_elapsed = chrono::Utc::now().signed_duration_since(start_date).num_days();
-    println!("DÃ­as de trial transcurridos: {}", days_elapsed);
-
-    if days_elapsed > 30 {
-        return Err("Tu periodo de prueba de 30 dÃ­as ha expirado. Por favor, activa tu licencia.".to_string());
+#[tauri::command]
+async fn save_api_key(provider: String, key: String, state: tauri::State<'_, SqlitePool>) -> Result<ApiKeyEntry, String> {
+    if key.trim().is_empty() {
+        return Err("API key no puede estar vacia.".to_string());
     }
-    Ok(())
+    let hw_id = get_hardware_id();
+    let (iv_b64, ct_b64) = crypto::encrypt(&key, &hw_id)?;
+
+    sqlx::query("INSERT INTO api_keys (provider, iv, ciphertext, updated_at) VALUES (?, ?, ?, datetime('now')) ON CONFLICT(provider) DO UPDATE SET iv = excluded.iv, ciphertext = excluded.ciphertext, updated_at = excluded.updated_at")
+        .bind(&provider)
+        .bind(&iv_b64)
+        .bind(&ct_b64)
+        .execute(&*state)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(ApiKeyEntry {
+        provider: provider.clone(),
+        masked_key: crypto::mask_key(&key),
+        created_at: chrono::Utc::now().to_rfc3339(),
+    })
+}
+
+#[tauri::command]
+async fn get_api_keys(state: tauri::State<'_, SqlitePool>) -> Result<Vec<ApiKeyEntry>, String> {
+    let rows = sqlx::query_as::<_, (String, String, String, String)>(
+        "SELECT provider, iv, ciphertext, created_at FROM api_keys ORDER BY provider"
+    )
+    .fetch_all(&*state)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let hw_id = get_hardware_id();
+    let mut entries = Vec::new();
+
+    for (provider, iv_b64, ct_b64, created_at) in rows {
+        match crypto::decrypt(&iv_b64, &ct_b64, &hw_id) {
+            Ok(decrypted) => {
+                entries.push(ApiKeyEntry {
+                    provider,
+                    masked_key: crypto::mask_key(&decrypted),
+                    created_at,
+                });
+            }
+            Err(_) => {
+                entries.push(ApiKeyEntry {
+                    provider,
+                    masked_key: "[error al descifrar]".to_string(),
+                    created_at,
+                });
+            }
+        }
+    }
+
+    Ok(entries)
+}
+
+#[tauri::command]
+async fn delete_api_key(provider: String, state: tauri::State<'_, SqlitePool>) -> Result<bool, String> {
+    let rows = sqlx::query("DELETE FROM api_keys WHERE provider = ?")
+        .bind(&provider)
+        .execute(&*state)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(rows.rows_affected() > 0)
 }
 
 // --- Comandos de Investigación ---
 
 #[tauri::command]
-async fn verify_doi_local(doi: String) -> Result<bool, String> {
+async fn verify_doi_local(doi: String, state: tauri::State<'_, SqlitePool>) -> Result<bool, String> {
     let client = reqwest::Client::new();
-    let url = format!("https://api.crossref.org/works/{}?mailto=hola@neuroscribe.app", doi);
+    let email = get_decrypted_api_key("crossref", &state).await.unwrap_or_else(|_| "hola@neuroscribe.app".to_string());
+    let url = format!("https://api.crossref.org/works/{}?mailto={}", doi, email);
     let res = client.get(url).send().await.map_err(|e| e.to_string())?;
     Ok(res.status().is_success())
 }
 
 #[tauri::command]
-async fn get_academic_data_local(query: String, high_precision: bool) -> Result<Vec<AcademicWork>, String> {
+async fn get_academic_data_local(query: String, high_precision: bool, state: tauri::State<'_, SqlitePool>) -> Result<Vec<AcademicWork>, String> {
     let client = reqwest::Client::new();
     let mesh_query = if high_precision { format!("{}[MeSH Terms]", query) } else { query.clone() };
+    let email = get_decrypted_api_key("crossref", &state).await.unwrap_or_else(|_| "hola@neuroscribe.app".to_string());
+    let pubmed_key = get_decrypted_api_key("pubmed", &state).await.ok();
 
     let (pubmed_res, openalex_res) = tokio::join!(
-        fetch_pubmed(&client, &mesh_query),
-        fetch_openalex(&client, &query)
+        fetch_pubmed(&client, &mesh_query, pubmed_key.as_deref()),
+        fetch_openalex(&client, &query, &email)
     );
 
     let mut combined = Vec::new();
@@ -263,15 +350,18 @@ async fn get_academic_data_local(query: String, high_precision: bool) -> Result<
     Ok(result.into_iter().take(15).collect())
 }
 
-async fn fetch_pubmed(client: &reqwest::Client, query: &str) -> Result<Vec<AcademicWork>, String> {
-    let search_url = format!("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term={}&retmode=json&retmax=10", query);
-    let res = client.get(search_url).send().await.map_err(|e| e.to_string())?;
+async fn fetch_pubmed(client: &reqwest::Client, query: &str, api_key: Option<&str>) -> Result<Vec<AcademicWork>, String> {
+    let mut url = format!("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term={}&retmode=json&retmax=10", query);
+    if let Some(key) = api_key { url.push_str(&format!("&api_key={}", key)); }
+    let res = client.get(&url).send().await.map_err(|e| e.to_string())?;
     let search_data: PubMedESearchResponse = res.json().await.map_err(|e| e.to_string())?;
     let ids = search_data.esearchresult.idlist;
     if ids.is_empty() { return Ok(vec![]); }
 
-    let summary_url = format!("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id={}&retmode=json", ids.join(","));
-    let res_sum = client.get(summary_url).send().await.map_err(|e| e.to_string())?;
+    let mut summary_url = format!("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id={}&retmode=json", ids.join(","));
+    if let Some(key) = api_key { summary_url.push_str(&format!("&api_key={}", key)); }
+    if let Some(key) = api_key { summary_url.push_str(&format!("&api_key={}", key)); }
+    let res_sum = client.get(&summary_url).send().await.map_err(|e| e.to_string())?;
     let summary_data: PubMedESummaryResponse = res_sum.json().await.map_err(|e| e.to_string())?;
 
     let mut works = Vec::new();
@@ -294,8 +384,8 @@ async fn fetch_pubmed(client: &reqwest::Client, query: &str) -> Result<Vec<Acade
     Ok(works)
 }
 
-async fn fetch_openalex(client: &reqwest::Client, query: &str) -> Result<Vec<AcademicWork>, String> {
-    let url = format!("https://api.openalex.org/works?search={}&mailto=hola@neuroscribe.app", query);
+async fn fetch_openalex(client: &reqwest::Client, query: &str, email: &str) -> Result<Vec<AcademicWork>, String> {
+    let url = format!("https://api.openalex.org/works?search={}&mailto={}", query, email);
     let res = client.get(url).send().await.map_err(|e| e.to_string())?;
     let data: OpenAlexResponse = res.json().await.map_err(|e| e.to_string())?;
     let mut works = Vec::new();
@@ -599,6 +689,449 @@ async fn download_model(model_name: &str, handle: AppHandle) -> Result<String, S
     Ok(format!("Descarga exitosa: {}", filename))
 }
 
+// --- Helper para API Keys ---
+
+async fn get_decrypted_api_key(provider: &str, pool: &SqlitePool) -> Result<String, String> {
+    let row = sqlx::query_as::<_, (String, String)>(
+        "SELECT iv, ciphertext FROM api_keys WHERE provider = ?"
+    )
+    .bind(provider)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    match row {
+        Some((iv_b64, ct_b64)) => {
+            let hw_id = get_hardware_id();
+            crypto::decrypt(&iv_b64, &ct_b64, &hw_id)
+        }
+        None => Err(format!("API key no configurada para {}. Ve a Configuracion > APIs.", provider)),
+    }
+}
+
+// --- Comandos de Transcripcion Cloud ---
+
+// Estructuras para parsear respuestas de APIs
+#[derive(Deserialize)]
+struct GladiaResponse {
+    result: GladiaResult,
+}
+
+#[derive(Deserialize)]
+struct GladiaResult {
+    transcription: GladiaTranscription,
+}
+
+#[derive(Deserialize)]
+struct GladiaTranscription {
+    utterances: Vec<GladiaUtterance>,
+}
+
+#[derive(Deserialize)]
+struct GladiaUtterance {
+    speaker: Option<i64>,
+    start: f64,
+    end: f64,
+    text: String,
+    confidence: Option<f64>,
+}
+
+#[derive(Deserialize)]
+struct DeepGramResponse {
+    results: DeepGramResults,
+}
+
+#[derive(Deserialize)]
+struct DeepGramResults {
+    channels: Vec<DeepGramChannel>,
+}
+
+#[derive(Deserialize)]
+struct DeepGramChannel {
+    alternatives: Vec<DeepGramAlternative>,
+}
+
+#[derive(Deserialize)]
+struct DeepGramAlternative {
+    words: Vec<DeepGramWord>,
+}
+
+#[derive(Deserialize)]
+struct DeepGramWord {
+    word: String,
+    start: f64,
+    end: f64,
+    speaker: Option<i64>,
+    confidence: f64,
+}
+
+#[derive(Deserialize)]
+struct AssemblyAIUploadResponse {
+    upload_url: String,
+}
+
+#[derive(Deserialize)]
+struct AssemblyAISubmitResponse {
+    id: String,
+    status: String,
+}
+
+#[derive(Deserialize)]
+struct AssemblyAIResultResponse {
+    status: String,
+    text: Option<String>,
+    utterances: Option<Vec<AssemblyAIUtterance>>,
+}
+
+#[derive(Deserialize)]
+struct AssemblyAIUtterance {
+    speaker: String,
+    start: i64,
+    end: i64,
+    text: String,
+    confidence: f64,
+}
+
+fn speaker_color(index: usize) -> String {
+    const COLORS: &[&str] = &[
+        "#6366f1", "#ec4899", "#10b981", "#f59e0b", "#8b5cf6",
+        "#06b6d4", "#f43f5e", "#84cc16", "#e11d48", "#0ea5e9",
+    ];
+    COLORS[index % COLORS.len()].to_string()
+}
+
+fn build_transcription_result(
+    utterances: &[(String, f64, f64, String, f64)],
+) -> TranscriptionResult {
+    let mut speaker_ids = std::collections::HashMap::new();
+    let mut speakers = Vec::new();
+    let mut segments = Vec::new();
+
+    for (label, start, end, text, confidence) in utterances {
+        let sid = speaker_ids.entry(label.clone()).or_insert_with(|| {
+            let id = format!("speaker-{}", speakers.len());
+            speakers.push(SpeakerInfo {
+                id: id.clone(),
+                label: label.clone(),
+                color: speaker_color(speakers.len()),
+            });
+            id
+        });
+
+        segments.push(TranscriptionSegment {
+            speaker_id: sid.clone(),
+            speaker_label: label.clone(),
+            text: text.clone(),
+            start_ms: (*start * 1000.0) as i64,
+            end_ms: (*end * 1000.0) as i64,
+            confidence: *confidence,
+        });
+    }
+
+    let full_text = segments.iter().map(|s| format!("[{}] {}", s.speaker_label, s.text)).collect::<Vec<_>>().join("\n");
+
+    TranscriptionResult { full_text, segments, speakers }
+}
+
+#[tauri::command]
+async fn transcribe_gladia(audio_path: String, state: tauri::State<'_, SqlitePool>) -> Result<TranscriptionResult, String> {
+    let api_key = get_decrypted_api_key("gladia", &state).await?;
+    let client = reqwest::Client::new();
+
+    let audio_data = fs::read(&audio_path).map_err(|e| format!("Error leyendo audio: {}", e))?;
+    let part = reqwest::multipart::Part::bytes(audio_data)
+        .file_name("audio.wav")
+        .mime_str("audio/wav")
+        .map_err(|e| e.to_string())?;
+
+    let form = reqwest::multipart::Form::new()
+        .part("audio", part)
+        .text("diarization", "true");
+
+    let res = client
+        .post("https://api.gladia.io/v2/transcription")
+        .header("x-gladia-key", &api_key)
+        .multipart(form)
+        .send()
+        .await
+        .map_err(|e| format!("Gladia request error: {}", e))?;
+
+    if !res.status().is_success() {
+        let status = res.status();
+        let body = res.text().await.unwrap_or_default();
+        return Err(format!("Gladia error {}: {}", status, body));
+    }
+
+    let data: GladiaResponse = res.json().await.map_err(|e| format!("Gladia parse error: {}", e))?;
+    let utterances: Vec<_> = data.result.transcription.utterances.iter().map(|u| {
+        let label = match u.speaker {
+            Some(s) => format!("Speaker {}", s + 1),
+            None => "Speaker 1".to_string(),
+        };
+        (label, u.start, u.end, u.text.clone(), u.confidence.unwrap_or(0.9))
+    }).collect();
+
+    Ok(build_transcription_result(&utterances))
+}
+
+#[tauri::command]
+async fn transcribe_deepgram(audio_path: String, state: tauri::State<'_, SqlitePool>) -> Result<TranscriptionResult, String> {
+    let api_key = get_decrypted_api_key("deepgram", &state).await?;
+    let client = reqwest::Client::new();
+
+    let audio_data = fs::read(&audio_path).map_err(|e| format!("Error leyendo audio: {}", e))?;
+
+    let res = client
+        .post("https://api.deepgram.com/v1/listen?diarize=true&smart_format=true")
+        .header("Authorization", format!("Token {}", api_key))
+        .header("Content-Type", "audio/wav")
+        .body(audio_data)
+        .send()
+        .await
+        .map_err(|e| format!("DeepGram request error: {}", e))?;
+
+    if !res.status().is_success() {
+        let status = res.status();
+        let body = res.text().await.unwrap_or_default();
+        return Err(format!("DeepGram error {}: {}", status, body));
+    }
+
+    let data: DeepGramResponse = res.json().await.map_err(|e| format!("DeepGram parse error: {}", e))?;
+    let mut utterances = Vec::new();
+    let mut current_speaker: Option<String> = None;
+    let mut current_text = String::new();
+    let mut current_start = 0.0;
+    let mut current_end = 0.0;
+    let mut current_conf = 0.0;
+    let mut conf_count = 0;
+
+    for channel in &data.results.channels {
+        for alt in &channel.alternatives {
+            for word in &alt.words {
+                let speaker_label = match word.speaker {
+                    Some(s) => format!("Speaker {}", s + 1),
+                    None => "Speaker 1".to_string(),
+                };
+
+                if current_speaker.as_deref() == Some(&speaker_label) {
+                    current_text.push(' ');
+                    current_text.push_str(&word.word);
+                    current_end = word.end;
+                    current_conf += word.confidence;
+                    conf_count += 1;
+                } else {
+                    if !current_text.is_empty() {
+                        utterances.push((
+                            current_speaker.unwrap_or("Speaker 1".to_string()),
+                            current_start,
+                            current_end,
+                            current_text.clone(),
+                            if conf_count > 0 { current_conf / conf_count as f64 } else { 0.9 },
+                        ));
+                    }
+                    current_speaker = Some(speaker_label);
+                    current_text = word.word.clone();
+                    current_start = word.start;
+                    current_end = word.end;
+                    current_conf = word.confidence;
+                    conf_count = 1;
+                }
+            }
+        }
+    }
+    if !current_text.is_empty() {
+        utterances.push((
+            current_speaker.unwrap_or("Speaker 1".to_string()),
+            current_start,
+            current_end,
+            current_text,
+            if conf_count > 0 { current_conf / conf_count as f64 } else { 0.9 },
+        ));
+    }
+
+    Ok(build_transcription_result(&utterances))
+}
+
+#[tauri::command]
+async fn transcribe_assemblyai(audio_path: String, state: tauri::State<'_, SqlitePool>) -> Result<TranscriptionResult, String> {
+    let api_key = get_decrypted_api_key("assemblyai", &state).await?;
+    let client = reqwest::Client::new();
+
+    let audio_data = fs::read(&audio_path).map_err(|e| format!("Error leyendo audio: {}", e))?;
+
+    let upload_res: AssemblyAIUploadResponse = client
+        .post("https://api.assemblyai.com/v2/upload")
+        .header("Authorization", &api_key)
+        .body(audio_data)
+        .send()
+        .await
+        .map_err(|e| format!("AssemblyAI upload error: {}", e))?
+        .json()
+        .await
+        .map_err(|e| format!("AssemblyAI upload parse error: {}", e))?;
+
+    let submit_res: AssemblyAISubmitResponse = client
+        .post("https://api.assemblyai.com/v2/transcript")
+        .header("Authorization", &api_key)
+        .json(&serde_json::json!({
+            "audio_url": upload_res.upload_url,
+            "speaker_labels": true
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("AssemblyAI submit error: {}", e))?
+        .json()
+        .await
+        .map_err(|e| format!("AssemblyAI submit parse error: {}", e))?;
+
+    let transcript_id = submit_res.id;
+
+    for _ in 0..60 {
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        let poll_res: AssemblyAIResultResponse = client
+            .get(format!("https://api.assemblyai.com/v2/transcript/{}", transcript_id))
+            .header("Authorization", &api_key)
+            .send()
+            .await
+            .map_err(|e| format!("AssemblyAI poll error: {}", e))?
+            .json()
+            .await
+            .map_err(|e| format!("AssemblyAI poll parse error: {}", e))?;
+
+        match poll_res.status.as_str() {
+            "completed" => {
+                if let Some(utts) = poll_res.utterances {
+                    let utterances: Vec<_> = utts.iter().map(|u| {
+                        (format!("Speaker {}", u.speaker), u.start as f64 / 1000.0, u.end as f64 / 1000.0, u.text.clone(), u.confidence)
+                    }).collect();
+                    return Ok(build_transcription_result(&utterances));
+                }
+                let text = poll_res.text.unwrap_or_default();
+                return Ok(TranscriptionResult {
+                    full_text: text,
+                    segments: vec![],
+                    speakers: vec![],
+                });
+            }
+            "error" => return Err("AssemblyAI processing error".to_string()),
+            _ => continue,
+        }
+    }
+
+    Err("AssemblyAI polling timeout (2 minutos)".to_string())
+}
+
+#[tauri::command]
+async fn transcribe_with_provider(audio_path: String, provider: String, state: tauri::State<'_, SqlitePool>) -> Result<TranscriptionResult, String> {
+    match provider.as_str() {
+        "gladia" => transcribe_gladia(audio_path, state).await,
+        "deepgram" => transcribe_deepgram(audio_path, state).await,
+        "assemblyai" => transcribe_assemblyai(audio_path, state).await,
+        _ => Err(format!("Provider desconocido: {}. Usa 'gladia', 'deepgram', o 'assemblyai'.", provider)),
+    }
+}
+
+// Para uso con offline
+#[tauri::command]
+async fn transcribe_with_provider_offline(audio_path: String, provider: String, state: tauri::State<'_, SqlitePool>, handle: AppHandle) -> Result<TranscriptionResult, String> {
+    match provider.as_str() {
+        "gladia" => transcribe_gladia(audio_path, state).await,
+        "deepgram" => transcribe_deepgram(audio_path, state).await,
+        "assemblyai" => transcribe_assemblyai(audio_path, state).await,
+        "offline" => {
+            let text = transcribe_audio_local(audio_path.clone(), state, handle).await?;
+            Ok(TranscriptionResult { full_text: text, segments: vec![], speakers: vec![] })
+        }
+        _ => Err(format!("Provider desconocido: {}", provider)),
+    }
+}
+
+#[tauri::command]
+async fn update_speaker_label(speaker_id: String, new_label: String, state: tauri::State<'_, SqlitePool>) -> Result<bool, String> {
+    sqlx::query("INSERT OR REPLACE INTO speaker_labels (speaker_id, label, is_user_defined) VALUES (?, ?, 1)")
+        .bind(&speaker_id)
+        .bind(&new_label)
+        .execute(&*state)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
+#[tauri::command]
+async fn llm_generate(provider: String, prompt: String, model: Option<String>, state: tauri::State<'_, SqlitePool>) -> Result<String, String> {
+    let api_key = get_decrypted_api_key(&provider, &state).await?;
+    let client = reqwest::Client::new();
+
+    match provider.as_str() {
+        "anthropic" => {
+            let model = model.unwrap_or_else(|| "claude-sonnet-4-20250514".to_string());
+            let res = client
+                .post("https://api.anthropic.com/v1/messages")
+                .header("x-api-key", &api_key)
+                .header("anthropic-version", "2023-06-01")
+                .json(&serde_json::json!({
+                    "model": model,
+                    "max_tokens": 4096,
+                    "messages": [{"role": "user", "content": prompt}]
+                }))
+                .send().await.map_err(|e| format!("Anthropic error: {}", e))?;
+
+            let data: serde_json::Value = res.json().await.map_err(|e| format!("Anthropic parse: {}", e))?;
+            data["content"][0]["text"].as_str()
+                .map(|s| s.to_string())
+                .ok_or("Anthropic response parse error".to_string())
+        }
+        "gemini" => {
+            let model = model.unwrap_or_else(|| "gemini-2.5-pro".to_string());
+            let url = format!("https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}", model, api_key);
+            let res = client
+                .post(&url)
+                .json(&serde_json::json!({
+                    "contents": [{"parts": [{"text": prompt}]}]
+                }))
+                .send().await.map_err(|e| format!("Gemini error: {}", e))?;
+
+            let data: serde_json::Value = res.json().await.map_err(|e| format!("Gemini parse: {}", e))?;
+            data["candidates"][0]["content"]["parts"][0]["text"].as_str()
+                .map(|s| s.to_string())
+                .ok_or("Gemini response parse error".to_string())
+        }
+        _ => {
+            // OpenAI-compatible: openai, openrouter, deepseek, xai, zai
+            let base_url = match provider.as_str() {
+                "openai" => "https://api.openai.com",
+                "openrouter" => "https://openrouter.ai/api",
+                "deepseek" => "https://api.deepseek.com",
+                "xai" => "https://api.x.ai",
+                "zai" => "https://api.z.ai",
+                _ => return Err(format!("Provider LLM desconocido: {}", provider)),
+            };
+            let model = model.unwrap_or_else(|| match provider.as_str() {
+                "openai" => "gpt-4o".to_string(),
+                "openrouter" => "openai/gpt-4o".to_string(),
+                "deepseek" => "deepseek-chat".to_string(),
+                "xai" => "grok-2".to_string(),
+                "zai" => "glm-4".to_string(),
+                _ => "gpt-4o".to_string(),
+            });
+
+            let res = client
+                .post(format!("{}/v1/chat/completions", base_url))
+                .header("Authorization", format!("Bearer {}", api_key))
+                .json(&serde_json::json!({
+                    "model": model,
+                    "messages": [{"role": "user", "content": prompt}]
+                }))
+                .send().await.map_err(|e| format!("{} error: {}", provider, e))?;
+
+            let data: serde_json::Value = res.json().await.map_err(|e| format!("{} parse: {}", provider, e))?;
+            data["choices"][0]["message"]["content"].as_str()
+                .map(|s| s.to_string())
+                .ok_or(format!("{} response parse error", provider))
+        }
+    }
+}
+
 #[tauri::command]
 fn greet(name: &str) -> String { format!("Hola, {}!", name) }
 
@@ -631,11 +1164,11 @@ pub fn run() {
           let pool = SqlitePool::connect_with(opts).await.unwrap();
           
           // Ejecutar migraciones una por una ignorando errores de 'ya existe'
-          println!("Ejecutando migraciÃ³n 01...");
+          println!("Ejecutando migracion 01...");
           let _ = sqlx::query(include_str!("../migrations/01_initial_schema.sql")).execute(&pool).await;
           
-          println!("Reparando/Verificando columnas de licencia (MigraciÃ³n 02)...");
-          // Ejecutamos cada alter table por separado para evitar que uno falle y detenga a los demÃ¡s
+          println!("Reparando/Verificando columnas de licencia (Migracion 02)...");
+          // Ejecutamos cada alter table por separado para evitar que uno falle y detenga a los demas
           let _ = sqlx::query("ALTER TABLE profiles ADD COLUMN license_key TEXT").execute(&pool).await;
           let _ = sqlx::query("ALTER TABLE profiles ADD COLUMN trial_start_date DATETIME DEFAULT CURRENT_TIMESTAMP").execute(&pool).await;
           let _ = sqlx::query("ALTER TABLE profiles ADD COLUMN is_activated BOOLEAN DEFAULT 0").execute(&pool).await;
@@ -644,11 +1177,17 @@ pub fn run() {
           // Asegurarnos de que el usuario local tenga una fecha de trial si la columna acaba de ser creada
           let _ = sqlx::query("UPDATE profiles SET trial_start_date = CURRENT_TIMESTAMP WHERE trial_start_date IS NULL").execute(&pool).await;
           
+          println!("Ejecutando migracion 03 (api_keys)...");
+          let _ = sqlx::query(include_str!("../migrations/03_api_keys.sql")).execute(&pool).await;
+
+          println!("Ejecutando migracion 04 (speaker_labels)...");
+          let _ = sqlx::query(include_str!("../migrations/04_speaker_labels.sql")).execute(&pool).await;
+          
           println!("Base de datos verificada y lista.");
           app.manage(pool);
       });
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![greet, db_get_profile, db_get_folders, db_create_folder, db_get_documents, db_save_document, get_hardware_info, get_hardware_id, check_models, download_model, transcribe_audio_local, process_text_local, generate_research_paper_local, generate_quick_answer_local, activate_license, get_academic_data_local, verify_doi_local, check_mirror_health, db_delete_model])
+    .invoke_handler(tauri::generate_handler![greet, db_get_profile, db_get_folders, db_create_folder, db_get_documents, db_save_document, get_hardware_info, get_hardware_id, check_models, download_model, transcribe_audio_local, process_text_local, generate_research_paper_local, generate_quick_answer_local, activate_license, get_academic_data_local, verify_doi_local, check_mirror_health, db_delete_model, save_api_key, get_api_keys, delete_api_key, transcribe_gladia, transcribe_deepgram, transcribe_assemblyai, transcribe_with_provider, transcribe_with_provider_offline, update_speaker_label, llm_generate])
     .run(tauri::generate_context!()).expect("run");
 }

@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { AcademicWork, ResearchResponse } from "@/types/research";
+import { llmGenerate } from "./ia";
 
 /**
  * Orquestador de búsqueda académica en el backend de Rust.
@@ -71,6 +72,26 @@ export async function generateQuickAnswer(query: string, works: AcademicWork[], 
 
 export async function searchResearch(query: string) {
   return getAcademicData(query);
+}
+
+export async function generateWithCloudLLM(
+  provider: string,
+  query: string,
+  works: AcademicWork[],
+  domain: string,
+  mode: "quick" | "full"
+): Promise<{ synthesis: string; sources: AcademicWork[] }> {
+  const context = works
+    .slice(0, 5)
+    .map((w, i) => `Fuente ${i + 1}: ${w.title} (${w.year})\n${w.abstract_text || w.journal}`)
+    .join("\n\n");
+
+  const prompt = mode === "quick"
+    ? `Responde a esta pregunta usando la evidencia proporcionada. Se conciso y cita las fuentes.\n\nPregunta: ${query}\nDominio: ${domain}\n\nEvidencia:\n${context}`
+    : `Genera un paper academico en formato APA 7ma edicion sobre el siguiente tema, usando la evidencia proporcionada. Incluye titulo bilingue, resumen, abstract, desarrollo con citas, y referencias.\n\nTema: ${query}\nDominio: ${domain}\n\nEvidencia:\n${context}`;
+
+  const synthesis = await llmGenerate(provider, prompt);
+  return { synthesis, sources: works.slice(0, 5) };
 }
 
 export async function saveResearch(data: any) {

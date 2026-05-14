@@ -1,4 +1,6 @@
 ﻿import { invoke } from '@tauri-apps/api/core';
+import type { TranscriptionResult } from '@/types/transcription';
+import type { ApiKeyEntry } from '@/types/apiKeys';
 
 export interface HardwareInfo {
   total_ram_gb: number;
@@ -15,7 +17,7 @@ export interface ModelStatus {
 }
 
 /**
- * Obtiene informaciÃ³n del hardware del usuario.
+ * Obtiene informacion del hardware del usuario.
  */
 export async function getHardwareInfo(): Promise<HardwareInfo | null> {
   try {
@@ -27,7 +29,7 @@ export async function getHardwareInfo(): Promise<HardwareInfo | null> {
 }
 
 /**
- * Verifica si los modelos necesarios estÃ¡n descargados.
+ * Verifica si los modelos necesarios estan descargados.
  */
 export async function checkModelStatus(): Promise<ModelStatus | null> {
   try {
@@ -51,7 +53,7 @@ export async function downloadModel(modelName: string): Promise<string> {
 }
 
 /**
- * Invoca el orquestador de transcripciÃ³n local.
+ * Invoca el orquestador de transcripcion local.
  * @param audio_path Ruta absoluta del archivo en disco.
  */
 export async function transcribeAudioLocal(audio_path: string): Promise<string> {
@@ -59,13 +61,13 @@ export async function transcribeAudioLocal(audio_path: string): Promise<string> 
     return await invoke<string>('transcribe_audio_local', { audio_path });
   } catch (err) {
     console.error("Error in local transcription:", err);
-    throw new Error(typeof err === 'string' ? err : "Fallo en la transcripciÃ³n offline.");
+    throw new Error(typeof err === 'string' ? err : "Fallo en la transcripcion offline.");
   }
 }
 
 /**
- * Invoca el orquestador de LLM local para resÃºmenes o anÃ¡lisis.
- * @param text Texto a procesar (transcripciÃ³n).
+ * Invoca el orquestador de LLM local para resumenes o analisis.
+ * @param text Texto a procesar (transcripcion).
  * @param task Tipo de tarea ('summary' | 'paper').
  */
 export async function generateSummaryLocal(text: string, task: 'summary' | 'paper' = 'summary'): Promise<string> {
@@ -73,6 +75,40 @@ export async function generateSummaryLocal(text: string, task: 'summary' | 'pape
     return await invoke<string>('process_text_local', { text, task });
   } catch (err) {
     console.error("Error in local LLM inference:", err);
-    throw new Error(typeof err === 'string' ? err : "Fallo en el anÃ¡lisis clÃ­nico offline.");
+    throw new Error(typeof err === 'string' ? err : "Fallo en el analisis clinico offline.");
   }
+}
+
+// --- API Keys ---
+
+export async function saveApiKey(provider: string, key: string): Promise<ApiKeyEntry> {
+  return invoke<ApiKeyEntry>('save_api_key', { provider, key });
+}
+
+export async function getApiKeys(): Promise<ApiKeyEntry[]> {
+  return invoke<ApiKeyEntry[]>('get_api_keys');
+}
+
+export async function deleteApiKey(provider: string): Promise<boolean> {
+  return invoke<boolean>('delete_api_key', { provider });
+}
+
+// --- Transcription Cloud ---
+
+export async function transcribeWithProvider(audioPath: string, provider: string): Promise<TranscriptionResult> {
+  return invoke<TranscriptionResult>('transcribe_with_provider', { audioPath, provider });
+}
+
+export async function transcribeWithProviderOffline(audioPath: string, provider: string): Promise<TranscriptionResult> {
+  return invoke<TranscriptionResult>('transcribe_with_provider_offline', { audioPath, provider });
+}
+
+export async function updateSpeakerLabel(speakerId: string, newLabel: string): Promise<boolean> {
+  return invoke<boolean>('update_speaker_label', { speakerId, newLabel });
+}
+
+// --- LLM Cloud Providers ---
+
+export async function llmGenerate(provider: string, prompt: string, model?: string): Promise<string> {
+  return invoke<string>('llm_generate', { provider, prompt, model });
 }

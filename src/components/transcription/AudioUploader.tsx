@@ -3,7 +3,10 @@
 import { Upload, X, FileAudio, Loader2, Mic, Square, Circle, ScreenShare } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import MeetingRecorder from "./MeetingRecorder";
-import { transcribeAudioLocal } from "@/app/actions/ia";
+import ProviderSelector from "./ProviderSelector";
+import SpeakerView from "./SpeakerView";
+import { transcribeAudioLocal, transcribeWithProviderOffline } from "@/app/actions/ia";
+import type { TranscriptionResult } from "@/types/transcription";
 
 // Importar APIs de Tauri solo si estamos en el entorno de escritorio
 const getTauriAPIs = async () => {
@@ -26,6 +29,8 @@ const AudioUploader = ({ onTranscriptionComplete }: AudioUploaderProps) => {
   const [status, setStatus] = useState("");
   const [progress, setProgress] = useState(0);
   const [mode, setMode] = useState<'upload' | 'record' | 'meeting'>('upload');
+  const [provider, setProvider] = useState<string>("offline");
+  const [transcriptionResult, setTranscriptionResult] = useState<TranscriptionResult | null>(null);
 
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -34,21 +39,18 @@ const AudioUploader = ({ onTranscriptionComplete }: AudioUploaderProps) => {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    let unlisten: any;
-
-    const setupListener = async () => {
+    let unlisten: (() => void) | null = null;
+    
+    async function setupListener() {
       const apis = await getTauriAPIs();
       if (apis?.listen) {
-        unlisten = await apis.listen('transcription-progress', (event: any) => {
-          const p = (event.payload as { progress: number }).progress;
-          setProgress(p);
-          setStatus(`Transcribiendo... (${p}%)`);
+        unlisten = await apis.listen<string>('transcription-progress', (event) => {
+          setStatus(`Procesando: ${event.payload}`);
         });
       }
-    };
+    }
 
     setupListener();
-
     return () => {
       if (unlisten) unlisten();
     };
@@ -112,32 +114,14 @@ const AudioUploader = ({ onTranscriptionComplete }: AudioUploaderProps) => {
     setAudioBlob(null);
     setProgress(0);
     setStatus("");
+    setTranscriptionResult(null);
   };
-
-  useEffect(() => {
-    let unlisten: (() => void) | null = null;
-    
-    async function setupListener() {
-      const { listen } = await import('@tauri-apps/api/event');
-      unlisten = await listen<string>('transcription-progress', (event) => {
-        // El evento trae algo como "[00:01.000 -> 00:05.000]"
-        // Podemos usar esto para dar una sensaciÃ³n de avance constante
-        setStatus(`Procesando: ${event.payload.split(' -> ')[1].replace(']', '')}`);
-        setProgress((prev) => Math.min(prev + 1, 95)); // Incrementar ligeramente el progreso
-      });
-    }
-
-    setupListener();
-    return () => {
-      if (unlisten) unlisten();
-    };
-  }, []);
 
   const handleUpload = async () => {
     if (!file) return;
     setIsUploading(true);
     setProgress(10);
-    setStatus("Preparando archivo local...");
+    setTranscriptionResult(null);
 
     try {
       const apis = await getTauriAPIs();
@@ -149,43 +133,55 @@ const AudioUploader = ({ onTranscriptionComplete }: AudioUploaderProps) => {
       const uint8Array = new Uint8Array(buffer);
       const tempPath = await join(await cacheDir(), file.name);
 
-      setStatus("Guardando en caché temporal...");
+      setStatus("Guardando en cache temporal...");
       await writeFile(tempPath, uint8Array);
       setProgress(30);
 
-      setStatus("Transcribiendo offline con Whisper-v3...");
-      const text = await transcribeAudioLocal(tempPath);
+      let resultText = "";
+
+      if (provider === "offline") {
+        setStatus("Transcribiendo offline con Whisper-v3...");
+        const text = await transcribeAudioLocal(tempPath);
+        setTranscriptionResult({ full_text: text, segments: [], speakers: [] });
+        resultText = text;
+      } else {
+        setStatus(`Transcribiendo con ${provider}...`);
+        const result = await transcribeWithProviderOffline(tempPath, provider);
+        setTranscriptionResult(result);
+        resultText = result.full_text;
+      }
 
       setProgress(90);
-      setStatus("Análisis finalizado.");
+      setStatus("Analisis finalizado.");
 
       if (onTranscriptionComplete) {
-        onTranscriptionComplete(text, 0);
+        onTranscriptionComplete(resultText, 0);
       }
 
       setProgress(100);
-      setStatus("¡Completado!");
+      setStatus("Completado!");
 
       setTimeout(() => {
         setIsUploading(false);
-        setFile(null);
-        setAudioBlob(null);
         setProgress(0);
         setStatus("");
       }, 1000);
 
     } catch (error: any) {
       console.error("Error processing audio:", error);
-      const errorMsg = error.message || (typeof error === 'string' ? error : "Error desconocido en la transcripciÃ³n.");
+      const errorMsg = error.message || (typeof error === 'string' ? error : "Error desconocido en la transcripcion.");
       setStatus(`Error: ${errorMsg}`);
       setIsUploading(false);
-      // Alerta de emergencia para romper el silencio
-      alert(`Fallo en la transcripciÃ³n: ${errorMsg}`);
+      alert(`Fallo en la transcripcion: ${errorMsg}`);
     }
   };
 
   return (
     <div className="w-full max-w-xl mx-auto p-6 border-2 border-dashed border-zinc-200 rounded-xl bg-zinc-50/30 dark:border-zinc-800 dark:bg-zinc-900/30">
+      <div className="mb-4">
+        <ProviderSelector value={provider} onChange={setProvider} />
+      </div>
+
       {!file && !isRecording && (
         <div className="flex p-1 bg-zinc-100 rounded-lg mb-6 dark:bg-zinc-800/50">
           <button onClick={() => setMode('upload')} className={`flex-1 flex items-center justify-center gap-2 py-1.5 text-xs font-medium rounded-md transition-all ${mode === 'upload' ? 'bg-white shadow-sm dark:bg-zinc-700 text-indigo-600 dark:text-indigo-400' : 'text-zinc-500'}`}>
@@ -276,8 +272,14 @@ const AudioUploader = ({ onTranscriptionComplete }: AudioUploaderProps) => {
             disabled={isUploading}
             className="w-full py-2.5 rounded-lg bg-indigo-600 text-white font-medium text-sm flex items-center justify-center gap-2 hover:bg-indigo-700 disabled:opacity-50 transition-colors"
           >
-            {isUploading ? <><Loader2 size={18} className="animate-spin" /> Transcribiendo...</> : "Iniciar Transcripción Local"}
+            {isUploading ? <><Loader2 size={18} className="animate-spin" /> Transcribiendo...</> : provider === "offline" ? "Iniciar Transcripcion Local" : `Transcribir con ${provider}`}
           </button>
+        </div>
+      )}
+
+      {transcriptionResult && !isUploading && (
+        <div className="mt-6 pt-6 border-t border-zinc-200 dark:border-zinc-700">
+          <SpeakerView result={transcriptionResult} />
         </div>
       )}
     </div>

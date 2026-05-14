@@ -1,6 +1,6 @@
 'use client'
 
-import { Folder, FolderPlus, Search, User, Loader2, Plus, X, Cpu } from "lucide-react";
+import { Folder, FolderPlus, Search, User, Loader2, Plus, X, Cpu, Key, Brain } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { getFolders, createFolder } from "@/app/actions/folders";
@@ -123,6 +123,20 @@ const Sidebar = () => {
           >
             <User size={14} className="text-zinc-400" />
             <span>Licencia</span>
+          </Link>
+          <Link
+            href="/settings/api-keys"
+            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 transition-colors"
+          >
+            <Key size={14} className="text-zinc-400" />
+            <span>API Keys</span>
+          </Link>
+          <Link
+            href="/settings/llm-providers"
+            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 transition-colors"
+          >
+            <Brain size={14} className="text-zinc-400" />
+            <span>LLM Providers</span>
           </Link>
         </nav>
       </div>
