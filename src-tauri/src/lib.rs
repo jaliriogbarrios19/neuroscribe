@@ -242,6 +242,31 @@ async fn activate_license(key: String, state: tauri::State<'_, SqlitePool>) -> R
     Ok(true)
 }
 
+async fn check_license_internal(state: tauri::State<'_, SqlitePool>) -> Result<(), String> {
+    let profile = sqlx::query_as::<_, Profile>("SELECT * FROM profiles LIMIT 1")
+        .fetch_one(&*state)
+        .await
+        .map_err(|e| format!("Error accediendo al perfil: {}", e))?;
+
+    if profile.is_activated { return Ok(()); }
+
+    let raw_date = profile.trial_start_date.clone().unwrap_or_else(|| profile.created_at.clone());
+
+    let start_date = chrono::NaiveDateTime::parse_from_str(&raw_date, "%Y-%m-%d %H:%M:%S")
+        .map(|ndt| chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(ndt, chrono::Utc))
+        .or_else(|_| chrono::DateTime::parse_from_rfc3339(&raw_date).map(|dt| dt.with_timezone(&chrono::Utc)))
+        .or_else(|_| chrono::DateTime::parse_from_str(&format!("{}+00:00", raw_date.replace(" ", "T")), "%Y-%m-%dT%H:%M:%S%z").map(|dt| dt.with_timezone(&chrono::Utc)))
+        .unwrap_or_else(|_| chrono::Utc::now());
+    
+    let days_elapsed = chrono::Utc::now().signed_duration_since(start_date).num_days();
+    println!("Dias de trial transcurridos: {}", days_elapsed);
+
+    if days_elapsed > 30 {
+        return Err("Tu periodo de prueba de 30 dias ha expirado. Por favor, activa tu licencia.".to_string());
+    }
+    Ok(())
+}
+
 // --- Comandos de API Keys ---
 
 #[tauri::command]
@@ -653,7 +678,7 @@ async fn download_model(model_name: &str, handle: AppHandle) -> Result<String, S
     let mirror_url = format!("https://models.neuroscribe.app/{}", filename);
     
     println!("Intentando descarga desde Espejo: {}", mirror_url);
-    let mut response = match client.get(&mirror_url).send().await {
+    let response = match client.get(&mirror_url).send().await {
         Ok(res) if res.status().is_success() => {
             println!("Espejo disponible. Iniciando descarga rápida...");
             res
@@ -773,6 +798,7 @@ struct AssemblyAIUploadResponse {
 #[derive(Deserialize)]
 struct AssemblyAISubmitResponse {
     id: String,
+    #[allow(dead_code)]
     status: String,
 }
 

@@ -29,7 +29,7 @@ sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "macros"] }
 uuid = { version = "1.7", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 sysinfo = "0.30"
-reqwest = { version = "0.11", features = ["json", "stream", "rustls-tls"] }
+reqwest = { version = "0.11", features = ["json", "stream", "rustls-tls", "multipart"] }
 futures-util = "0.3"
 tokio = { version = "1", features = ["full"] }
 regex = "1"
