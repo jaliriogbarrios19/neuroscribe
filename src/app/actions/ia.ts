@@ -81,8 +81,8 @@ export async function generateSummaryLocal(text: string, task: 'summary' | 'pape
 
 // --- API Keys ---
 
-export async function saveApiKey(provider: string, key: string): Promise<ApiKeyEntry> {
-  return invoke<ApiKeyEntry>('save_api_key', { provider, key });
+export async function saveApiKey(provider: string, key: string, model?: string): Promise<ApiKeyEntry> {
+  return invoke<ApiKeyEntry>('save_api_key', { provider, key, model });
 }
 
 export async function getApiKeys(): Promise<ApiKeyEntry[]> {

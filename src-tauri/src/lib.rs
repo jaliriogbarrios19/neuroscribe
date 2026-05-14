@@ -19,6 +19,8 @@ pub struct ApiKeyEntry {
     pub provider: String,
     pub masked_key: String,
     pub created_at: String,
+    #[sqlx(default)]
+    pub model: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -270,17 +272,18 @@ async fn check_license_internal(state: tauri::State<'_, SqlitePool>) -> Result<(
 // --- Comandos de API Keys ---
 
 #[tauri::command]
-async fn save_api_key(provider: String, key: String, state: tauri::State<'_, SqlitePool>) -> Result<ApiKeyEntry, String> {
+async fn save_api_key(provider: String, key: String, model: Option<String>, state: tauri::State<'_, SqlitePool>) -> Result<ApiKeyEntry, String> {
     if key.trim().is_empty() {
         return Err("API key no puede estar vacia.".to_string());
     }
     let hw_id = get_hardware_id();
     let (iv_b64, ct_b64) = crypto::encrypt(&key, &hw_id)?;
 
-    sqlx::query("INSERT INTO api_keys (provider, iv, ciphertext, updated_at) VALUES (?, ?, ?, datetime('now')) ON CONFLICT(provider) DO UPDATE SET iv = excluded.iv, ciphertext = excluded.ciphertext, updated_at = excluded.updated_at")
+    sqlx::query("INSERT INTO api_keys (provider, iv, ciphertext, model, updated_at) VALUES (?, ?, ?, ?, datetime('now')) ON CONFLICT(provider) DO UPDATE SET iv = excluded.iv, ciphertext = excluded.ciphertext, model = excluded.model, updated_at = excluded.updated_at")
         .bind(&provider)
         .bind(&iv_b64)
         .bind(&ct_b64)
+        .bind(&model)
         .execute(&*state)
         .await
         .map_err(|e| e.to_string())?;
@@ -289,13 +292,14 @@ async fn save_api_key(provider: String, key: String, state: tauri::State<'_, Sql
         provider: provider.clone(),
         masked_key: crypto::mask_key(&key),
         created_at: chrono::Utc::now().to_rfc3339(),
+        model,
     })
 }
 
 #[tauri::command]
 async fn get_api_keys(state: tauri::State<'_, SqlitePool>) -> Result<Vec<ApiKeyEntry>, String> {
-    let rows = sqlx::query_as::<_, (String, String, String, String)>(
-        "SELECT provider, iv, ciphertext, created_at FROM api_keys ORDER BY provider"
+    let rows = sqlx::query_as::<_, (String, String, String, String, Option<String>)>(
+        "SELECT provider, iv, ciphertext, created_at, model FROM api_keys ORDER BY provider"
     )
     .fetch_all(&*state)
     .await
@@ -304,13 +308,14 @@ async fn get_api_keys(state: tauri::State<'_, SqlitePool>) -> Result<Vec<ApiKeyE
     let hw_id = get_hardware_id();
     let mut entries = Vec::new();
 
-    for (provider, iv_b64, ct_b64, created_at) in rows {
+    for (provider, iv_b64, ct_b64, created_at, model) in rows {
         match crypto::decrypt(&iv_b64, &ct_b64, &hw_id) {
             Ok(decrypted) => {
                 entries.push(ApiKeyEntry {
                     provider,
                     masked_key: crypto::mask_key(&decrypted),
                     created_at,
+                    model,
                 });
             }
             Err(_) => {
@@ -318,6 +323,7 @@ async fn get_api_keys(state: tauri::State<'_, SqlitePool>) -> Result<Vec<ApiKeyE
                     provider,
                     masked_key: "[error al descifrar]".to_string(),
                     created_at,
+                    model,
                 });
             }
         }
@@ -1086,6 +1092,24 @@ async fn update_speaker_label(speaker_id: String, new_label: String, state: taur
 #[tauri::command]
 async fn llm_generate(provider: String, prompt: String, model: Option<String>, state: tauri::State<'_, SqlitePool>) -> Result<String, String> {
     let api_key = get_decrypted_api_key(&provider, &state).await?;
+
+    // Obtener el model almacenado en BD si no se pasa explicitamente
+    let stored_model = if model.is_none() {
+        let row = sqlx::query_as::<_, (Option<String>,)>(
+            "SELECT model FROM api_keys WHERE provider = ?"
+        )
+        .bind(&provider)
+        .fetch_optional(&*state)
+        .await
+        .map_err(|e| e.to_string())?
+        .and_then(|(m,)| m);
+        row
+    } else {
+        None
+    };
+
+    let model = model.or(stored_model);
+
     let client = reqwest::Client::new();
 
     match provider.as_str() {
@@ -1123,7 +1147,6 @@ async fn llm_generate(provider: String, prompt: String, model: Option<String>, s
                 .ok_or("Gemini response parse error".to_string())
         }
         _ => {
-            // OpenAI-compatible: openai, openrouter, deepseek, xai, zai
             let base_url = match provider.as_str() {
                 "openai" => "https://api.openai.com",
                 "openrouter" => "https://openrouter.ai/api",
@@ -1208,6 +1231,9 @@ pub fn run() {
 
           println!("Ejecutando migracion 04 (speaker_labels)...");
           let _ = sqlx::query(include_str!("../migrations/04_speaker_labels.sql")).execute(&pool).await;
+
+          println!("Ejecutando migracion 05 (api_keys model)...");
+          let _ = sqlx::query(include_str!("../migrations/05_api_keys_model.sql")).execute(&pool).await;
           
           println!("Base de datos verificada y lista.");
           app.manage(pool);

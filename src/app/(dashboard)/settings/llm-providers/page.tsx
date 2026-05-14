@@ -10,6 +10,7 @@ interface ProviderRow {
   id: string;
   provider: LlmProviderKey | "";
   key: string;
+  model: string;
   saved: boolean;
 }
 
@@ -38,6 +39,7 @@ export default function LlmProvidersPage() {
           id: crypto.randomUUID(),
           provider: k.provider as LlmProviderKey,
           key: "",
+          model: k.model || LLM_PROVIDERS.find(p => p.key === k.provider)?.defaultModel || "",
           saved: true,
         })));
       }
@@ -53,12 +55,21 @@ export default function LlmProvidersPage() {
       id: crypto.randomUUID(),
       provider: "",
       key: "",
+      model: "",
       saved: false,
     }]);
   };
 
-  const updateRow = (id: string, field: "provider" | "key", value: string) => {
-    setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+  const updateRow = (id: string, field: "provider" | "key" | "model", value: string) => {
+    setRows(prev => prev.map(r => {
+      if (r.id !== id) return r;
+      // Si cambia el provider, auto-seleccionar el modelo por defecto
+      if (field === "provider" && value) {
+        const defaultModel = LLM_PROVIDERS.find(p => p.key === value)?.defaultModel || "";
+        return { ...r, provider: value as LlmProviderKey, model: defaultModel };
+      }
+      return { ...r, [field]: value };
+    }));
   };
 
   const removeRow = async (id: string) => {
@@ -83,7 +94,7 @@ export default function LlmProvidersPage() {
 
     setSaving(id);
     try {
-      await invoke("save_api_key", { provider: row.provider, key: row.key });
+      await invoke("save_api_key", { provider: row.provider, key: row.key, model: row.model || null });
       setRows(prev => prev.map(r => r.id === id ? { ...r, key: "", saved: true } : r));
       await loadExisting();
     } catch (err: any) {
@@ -177,20 +188,44 @@ export default function LlmProvidersPage() {
                 </div>
 
                 {row.saved ? (
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 size={14} className="text-emerald-500" />
-                    <span className="text-xs text-emerald-600 font-medium">
-                      {getMaskedKey(row.provider)}
-                    </span>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 size={14} className="text-emerald-500" />
+                      <span className="text-xs text-emerald-600 font-medium">
+                        {getMaskedKey(row.provider)}
+                      </span>
+                    </div>
+                    {row.model && (
+                      <div className="text-[10px] text-zinc-500 flex items-center gap-1">
+                        <span className="text-zinc-400">Modelo:</span>
+                        <span className="font-medium">{row.model}</span>
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <input
-                    type="password"
-                    placeholder={`API key de ${LLM_PROVIDERS.find(p => p.key === row.provider)?.label || "provider"}`}
-                    value={row.key}
-                    onChange={(e) => updateRow(row.id, "key", e.target.value)}
-                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
-                  />
+                  <div className="space-y-3">
+                    <input
+                      type="password"
+                      placeholder={`API key de ${LLM_PROVIDERS.find(p => p.key === row.provider)?.label || "provider"}`}
+                      value={row.key}
+                      onChange={(e) => updateRow(row.id, "key", e.target.value)}
+                      className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+                    />
+                    {row.provider && (
+                      <div className="relative">
+                        <select
+                          value={row.model}
+                          onChange={(e) => updateRow(row.id, "model", e.target.value)}
+                          className="w-full appearance-none rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+                        >
+                          {LLM_PROVIDERS.find(p => p.key === row.provider)?.models.map(m => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                        <ChevronDown size={14} className="absolute right-3 top-2.5 text-zinc-400 pointer-events-none" />
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -217,7 +252,7 @@ export default function LlmProvidersPage() {
 
             {row.provider && LLM_PROVIDERS.find(p => p.key === row.provider) && (
               <div className="mt-3 text-[10px] text-zinc-400">
-                Modelo por defecto: {LLM_PROVIDERS.find(p => p.key === row.provider)?.defaultModel}
+                Modelo: {LLM_PROVIDERS.find(p => p.key === row.provider)?.defaultModel}
               </div>
             )}
           </div>
