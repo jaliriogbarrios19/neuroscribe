@@ -4,10 +4,10 @@ export interface AcademicWork {
   authors: { name: string; orcid?: string }[];
   year: number;
   journal?: string;
-  abstract?: string;
+  abstract_text?: string;
   relevance_score: number;
   url?: string;
-  mesh_terms: string[]; // Nuevo: Términos MeSH asociados
+  mesh_terms: string[];
 }
 
 export interface SearchOptions {

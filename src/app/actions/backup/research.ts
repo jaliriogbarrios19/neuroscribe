@@ -116,7 +116,7 @@ export async function generateScienceSynthesis(query: string, works: AcademicWor
     throw new Error("OPENROUTER_API_KEY no configurada");
   }
 
-  const context = works.map((w, i) => `[${i+1}] ${w.title} (${w.year}). DOI: ${w.doi}\nAbstract: ${w.abstract || "No disponible"}`).join("\n\n");
+  const context = works.map((w, i) => `[${i+1}] ${w.title} (${w.year}). DOI: ${w.doi}\nAbstract: ${w.abstract_text || "No disponible"}`).join("\n\n");
 
   const prompt = `
     Eres el Agente Investigador de NeuroScribe. Tu tarea es responder a la siguiente consulta médica/científica utilizando EXCLUSIVAMENTE los artículos proporcionados abajo.
