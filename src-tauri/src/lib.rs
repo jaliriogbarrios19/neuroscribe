@@ -891,10 +891,10 @@ async fn transcribe_gladia(audio_path: String, state: tauri::State<'_, SqlitePoo
     if !res.status().is_success() {
         let status = res.status();
         let body = res.text().await.unwrap_or_default();
-        return Err(format!("Gladia error {}: {}", status, body));
+        return Err(format!("Gladia error HTTP {}: {}", status, body));
     }
 
-    let data: GladiaResponse = res.json().await.map_err(|e| format!("Gladia parse error: {}", e))?;
+    let data: GladiaResponse = res.json().await.map_err(|e| format!("Gladia parse error: {}. Verifica tu API key.", e))?;
     let utterances: Vec<_> = data.result.transcription.utterances.iter().map(|u| {
         let label = match u.speaker {
             Some(s) => format!("Speaker {}", s + 1),
@@ -925,10 +925,10 @@ async fn transcribe_deepgram(audio_path: String, state: tauri::State<'_, SqliteP
     if !res.status().is_success() {
         let status = res.status();
         let body = res.text().await.unwrap_or_default();
-        return Err(format!("DeepGram error {}: {}", status, body));
+        return Err(format!("DeepGram error HTTP {}: {}", status, body));
     }
 
-    let data: DeepGramResponse = res.json().await.map_err(|e| format!("DeepGram parse error: {}", e))?;
+    let data: DeepGramResponse = res.json().await.map_err(|e| format!("DeepGram parse error: {}. Verifica tu API key.", e))?;
     let mut utterances = Vec::new();
     let mut current_speaker: Option<String> = None;
     let mut current_text = String::new();
@@ -991,41 +991,70 @@ async fn transcribe_assemblyai(audio_path: String, state: tauri::State<'_, Sqlit
 
     let audio_data = fs::read(&audio_path).map_err(|e| format!("Error leyendo audio: {}", e))?;
 
-    let upload_res: AssemblyAIUploadResponse = client
+    // 1. Upload
+    let upload_response = client
         .post("https://api.assemblyai.com/v2/upload")
-        .header("Authorization", &api_key)
+        .header("authorization", &api_key)
+        .header("content-type", "application/octet-stream")
         .body(audio_data)
         .send()
         .await
-        .map_err(|e| format!("AssemblyAI upload error: {}", e))?
+        .map_err(|e| format!("AssemblyAI upload error: {}", e))?;
+
+    if !upload_response.status().is_success() {
+        let status = upload_response.status();
+        let body = upload_response.text().await.unwrap_or_default();
+        return Err(format!("AssemblyAI upload error {}: {}", status, body));
+    }
+
+    let upload_res: AssemblyAIUploadResponse = upload_response
         .json()
         .await
-        .map_err(|e| format!("AssemblyAI upload parse error: {}", e))?;
+        .map_err(|e| format!("AssemblyAI upload parse error: {}. La API key puede ser invalida.", e))?;
 
-    let submit_res: AssemblyAISubmitResponse = client
+    // 2. Submit
+    let submit_response = client
         .post("https://api.assemblyai.com/v2/transcript")
-        .header("Authorization", &api_key)
+        .header("authorization", &api_key)
+        .header("content-type", "application/json")
         .json(&serde_json::json!({
             "audio_url": upload_res.upload_url,
             "speaker_labels": true
         }))
         .send()
         .await
-        .map_err(|e| format!("AssemblyAI submit error: {}", e))?
+        .map_err(|e| format!("AssemblyAI submit error: {}", e))?;
+
+    if !submit_response.status().is_success() {
+        let status = submit_response.status();
+        let body = submit_response.text().await.unwrap_or_default();
+        return Err(format!("AssemblyAI submit error {}: {}", status, body));
+    }
+
+    let submit_res: AssemblyAISubmitResponse = submit_response
         .json()
         .await
         .map_err(|e| format!("AssemblyAI submit parse error: {}", e))?;
 
     let transcript_id = submit_res.id;
 
-    for _ in 0..60 {
+    // 3. Poll
+    for _ in 0..90 {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-        let poll_res: AssemblyAIResultResponse = client
+        let poll_response = client
             .get(format!("https://api.assemblyai.com/v2/transcript/{}", transcript_id))
-            .header("Authorization", &api_key)
+            .header("authorization", &api_key)
             .send()
             .await
-            .map_err(|e| format!("AssemblyAI poll error: {}", e))?
+            .map_err(|e| format!("AssemblyAI poll error: {}", e))?;
+
+        if !poll_response.status().is_success() {
+            let status = poll_response.status();
+            let body = poll_response.text().await.unwrap_or_default();
+            return Err(format!("AssemblyAI poll error {}: {}", status, body));
+        }
+
+        let poll_res: AssemblyAIResultResponse = poll_response
             .json()
             .await
             .map_err(|e| format!("AssemblyAI poll parse error: {}", e))?;
@@ -1045,12 +1074,15 @@ async fn transcribe_assemblyai(audio_path: String, state: tauri::State<'_, Sqlit
                     speakers: vec![],
                 });
             }
-            "error" => return Err("AssemblyAI processing error".to_string()),
+            "error" => {
+                let error_text = poll_res.text.unwrap_or_else(|| "Unknown error".to_string());
+                return Err(format!("AssemblyAI processing error: {}", error_text));
+            }
             _ => continue,
         }
     }
 
-    Err("AssemblyAI polling timeout (2 minutos)".to_string())
+    Err("AssemblyAI polling timeout (3 minutos)".to_string())
 }
 
 #[tauri::command]
