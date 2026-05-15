@@ -13,7 +13,7 @@ export const LLM_PROVIDERS = [
   { key: "openrouter", label: "OpenRouter", baseUrl: "https://openrouter.ai/api", defaultModel: "openai/gpt-4o",
     models: ["openai/gpt-4o", "openai/gpt-4.1", "anthropic/claude-sonnet-4", "anthropic/claude-opus-4", "google/gemini-2.5-pro", "google/gemini-2.5-flash", "meta-llama/llama-4-maverick", "deepseek/deepseek-chat"] },
   { key: "deepseek", label: "DeepSeek", baseUrl: "https://api.deepseek.com", defaultModel: "deepseek-chat",
-    models: ["deepseek-chat", "deepseek-reasoner"] },
+    models: ["deepseek-chat", "deepseek-reasoner", "deepseek-v4-pro", "deepseek-v4-flash"] },
   { key: "anthropic", label: "Anthropic", baseUrl: "https://api.anthropic.com", defaultModel: "claude-sonnet-4-20250514",
     models: ["claude-sonnet-4-20250514", "claude-opus-4-20250514", "claude-haiku-3.5", "claude-3.5-sonnet"] },
   { key: "gemini", label: "Google Gemini", baseUrl: "https://generativelanguage.googleapis.com", defaultModel: "gemini-2.5-pro",
