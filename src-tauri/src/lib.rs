@@ -1019,9 +1019,7 @@ async fn transcribe_assemblyai(audio_path: String, state: tauri::State<'_, Sqlit
         .header("content-type", "application/json")
         .json(&serde_json::json!({
             "audio_url": upload_res.upload_url,
-            "speaker_labels": true,
-            "speech_models": ["universal-3"],
-            "language_detection": true
+            "speaker_labels": true
         }))
         .send()
         .await
