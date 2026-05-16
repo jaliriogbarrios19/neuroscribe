@@ -29,7 +29,6 @@
 - **Workflow:** SDD (Spec-Driven Development)
 
 ## [PRÓXIMOS PASOS]
-- Streaming de transcripción en tiempo real
-- Soporte para más providers LLM
 - Conversión automática de audio (FFmpeg)
+- Soporte para más providers LLM
 - Tests automatizados
