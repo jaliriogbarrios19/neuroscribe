@@ -35,8 +35,8 @@ const ResearchSidebar = ({ isOpen, onClose, onInsertResult }: ResearchSidebarPro
       const keys = await getApiKeys();
       const llmKeys = keys.filter(k => LLM_PROVIDERS.some(p => p.key === k.provider));
       setConfiguredProviders(llmKeys);
-    } catch {
-      // Silent
+    } catch (err) {
+      console.error("Error loading LLM providers:", err);
     }
   };
 
